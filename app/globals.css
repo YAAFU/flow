@@ -1,0 +1,123 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@font-face{font-family:'MiSans Thai';src:url('/fonts/MiSansThai-Normal.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'MiSans Thai';src:url('/fonts/MiSansThai-Medium.woff2') format('woff2');font-weight:500;font-display:swap}
+@font-face{font-family:'MiSans Thai';src:url('/fonts/MiSansThai-Semibold.woff2') format('woff2');font-weight:600;font-display:swap}
+@font-face{font-family:'MiSans Thai';src:url('/fonts/MiSansThai-Bold.woff2') format('woff2');font-weight:700;font-display:swap}
+
+:root{
+  --flow-ink:#111111;
+  --flow-paper:#ffffff;
+  --flow-lime:#d6ff3f;
+  --flow-lime-dark:#9cc400;
+  --flow-muted:#6f6f69;
+  --flow-line:#111111;
+  --flow-surface:#f5f5ef;
+  --flow-surface-strong:#ecece4;
+  --flow-inverse:#111111;
+  --flow-inverse-text:#ffffff;
+  --flow-warning:#b96300;
+  --flow-shadow:0 12px 36px rgba(17,17,17,.08);
+  --flow-shadow-small:0 4px 14px rgba(17,17,17,.07);
+  --flow-ease:cubic-bezier(.22,1,.36,1);
+  --flow-ease-soft:cubic-bezier(.4,0,.2,1);
+  --radius:12px;
+}
+
+html[data-theme="dark"]{
+  --flow-ink:#f4f4ee;
+  --flow-paper:#111111;
+  --flow-muted:#aaa99f;
+  --flow-line:#deded5;
+  --flow-surface:#1b1b19;
+  --flow-surface-strong:#282824;
+  /* Inverse cards stay black in both themes so the CI lime remains readable. */
+  --flow-inverse:#111111;
+  --flow-inverse-text:#ffffff;
+  --flow-shadow:0 16px 42px rgba(0,0,0,.32);
+  --flow-shadow-small:0 6px 18px rgba(0,0,0,.24);
+  color-scheme:dark;
+}
+
+*{box-sizing:border-box}
+html{min-width:320px;overflow-x:hidden;background:var(--flow-paper);scroll-behavior:smooth}
+body{min-height:100dvh;margin:0;overflow-x:hidden;background:var(--flow-paper);color:var(--flow-ink);font-family:'MiSans Thai',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button,input,select,textarea{font:inherit}
+button,a{-webkit-tap-highlight-color:transparent}
+button:not(:disabled){cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.48}
+::selection{background:var(--flow-lime);color:#111111}
+
+/* Thai stays in MiSans. Apply this class only to Latin, numerals and symbols. */
+.font-grotesk{font-family:var(--font-grotesk),'Space Grotesk','MiSans Thai',sans-serif}
+
+/* Semantic surfaces keep light/dark mode consistent without introducing new CI colours. */
+.flow-surface{background:var(--flow-surface)}
+.flow-inverse{background:var(--flow-inverse);color:var(--flow-inverse-text)}
+.flow-inverse .flow-accent{color:var(--flow-lime)}
+.flow-card{background:var(--flow-paper);border:1.5px solid var(--flow-line);box-shadow:var(--flow-shadow-small);transition:transform .24s var(--flow-ease),box-shadow .24s var(--flow-ease),background-color .24s ease}
+.flow-hairline{border-color:color-mix(in srgb,var(--flow-line) 18%,transparent)}
+.flow-form :is(input,select,textarea){min-width:0;background-color:var(--flow-paper);border-color:color-mix(in srgb,var(--flow-line) 72%,transparent);transition:border-color .2s ease,box-shadow .2s ease,transform .2s var(--flow-ease)}
+.flow-form :is(input,select,textarea):hover{border-color:var(--flow-line)}
+.flow-form input[type="checkbox"]{accent-color:var(--flow-lime-dark)}
+
+/* Motion language: short distance, quick response, calm settle. */
+@keyframes flow-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes flow-pop{0%{opacity:0;transform:scale(.96)}70%{transform:scale(1.012)}100%{opacity:1;transform:scale(1)}}
+@keyframes flow-fade{from{opacity:0}to{opacity:1}}
+@keyframes flow-view{from{opacity:0;transform:translateY(8px);filter:blur(2px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+@keyframes flow-sheet{from{opacity:0;transform:translateY(28px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes flow-backdrop{from{opacity:0}to{opacity:1}}
+@keyframes flow-sheet-out{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(18px) scale(.99)}}
+@keyframes flow-backdrop-out{from{opacity:1}to{opacity:0}}
+@keyframes flow-expand{0%{opacity:0;transform:translateY(-12px) scaleY(.92)}100%{opacity:1;transform:translateY(0) scaleY(1)}}
+@keyframes flow-collapse{0%{opacity:1;transform:translateY(0) scaleY(1)}100%{opacity:0;transform:translateY(-12px) scaleY(.92)}}
+@keyframes flow-fade-out{from{opacity:1}to{opacity:0}}
+@keyframes flow-slide-next{from{opacity:0;transform:translateX(22px)}to{opacity:1;transform:translateX(0)}}
+@keyframes flow-slide-prev{from{opacity:0;transform:translateX(-22px)}to{opacity:1;transform:translateX(0)}}
+@keyframes flow-pulse-line{0%,100%{transform:scaleX(.25);opacity:.5}50%{transform:scaleX(1);opacity:1}}
+
+.flow-rise{opacity:0;animation:flow-rise .5s var(--flow-ease) forwards}
+.flow-pop{opacity:0;animation:flow-pop .42s var(--flow-ease) forwards}
+.flow-fade{opacity:0;animation:flow-fade .35s ease forwards}
+.flow-view{animation:flow-view .38s var(--flow-ease) both}
+.flow-sheet{animation:flow-sheet .46s var(--flow-ease) both}
+.flow-backdrop{animation:flow-backdrop .22s ease both}
+.flow-sheet-out{animation:flow-sheet-out .18s var(--flow-ease-soft) both}
+.flow-backdrop-out{animation:flow-backdrop-out .18s ease both}
+.flow-expand{transform-origin:top center;animation:flow-expand .42s var(--flow-ease)}
+.flow-collapse{transform-origin:top center;animation:flow-collapse .24s var(--flow-ease-soft) forwards}
+.flow-fade-out{animation:flow-fade-out .22s ease forwards}
+.flow-blur-in{animation:flow-fade .3s var(--flow-ease) forwards}
+.flow-blur-out{animation:flow-fade-out .24s var(--flow-ease-soft) forwards}
+.flow-slide-next{animation:flow-slide-next .32s var(--flow-ease)}
+.flow-slide-prev{animation:flow-slide-prev .32s var(--flow-ease)}
+.flow-bar{transition:width .8s var(--flow-ease)}
+
+.flow-stagger>*{opacity:0;animation:flow-rise .46s var(--flow-ease) forwards}
+.flow-stagger>*:nth-child(1){animation-delay:30ms}.flow-stagger>*:nth-child(2){animation-delay:70ms}.flow-stagger>*:nth-child(3){animation-delay:110ms}.flow-stagger>*:nth-child(4){animation-delay:150ms}.flow-stagger>*:nth-child(5){animation-delay:190ms}.flow-stagger>*:nth-child(n+6){animation-delay:220ms}
+
+button,.flow-press{transition:transform .16s var(--flow-ease),background-color .2s ease,color .2s ease,border-color .2s ease,box-shadow .2s ease,opacity .2s ease}
+.flow-press:active,button:not(:disabled):active{transform:scale(.975)}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--flow-ink);outline-offset:3px;box-shadow:0 0 0 5px var(--flow-lime)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+@media (hover:hover) and (pointer:fine){
+  .flow-card:hover{transform:translateY(-2px);box-shadow:var(--flow-shadow)}
+  .flow-press:not(:disabled):hover{transform:translateY(-1px)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  .flow-rise,.flow-pop,.flow-fade,.flow-stagger>*{opacity:1}
+}
+
+/* Guided tour follows Flow CI. */
+.driver-popover{font-family:'MiSans Thai',sans-serif!important;border-radius:16px!important;border:1.5px solid var(--flow-ink)!important;background:var(--flow-paper)!important;color:var(--flow-ink)!important;box-shadow:var(--flow-shadow)!important}
+.driver-popover-title{font-family:'MiSans Thai',sans-serif!important;font-weight:700!important}
+.driver-popover-description{font-family:'MiSans Thai',sans-serif!important}
+.driver-popover-progress-text{font-family:var(--font-grotesk),'Space Grotesk',sans-serif!important;color:var(--flow-muted)!important}
+.driver-popover-navigation-btns button{font-family:'MiSans Thai',sans-serif!important;font-weight:600!important}
+.driver-popover-next-btn{background:var(--flow-inverse)!important;color:var(--flow-lime)!important;text-shadow:none!important;border:none!important}
