@@ -15,8 +15,8 @@ const STATUS_LABEL: Record<DayStatus, string> = { done: "เสร็จแล�
 
 export function MonthGrid({ year, month, load, onPick, selected, labels, compact, today, pickMode, minDate, status }:
   { year: number; month: number; load: DayLoad; onPick: (day: number) => void; selected?: number; labels?: Record<number, string>; compact?: boolean; today?: number; pickMode?: boolean; minDate?: string; status?: Record<number, DayStatus> }) {
-  const first = new Date(year, month, 1).getDay();
-  const days = new Date(year, month + 1, 0).getDate();
+  const first = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
   const cells: (number | null)[] = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
 
   // compact = the home calendar. Same elements whether browsing or picking-a-day;
@@ -56,7 +56,7 @@ export function MonthGrid({ year, month, load, onPick, selected, labels, compact
               <button key={i} disabled={disabled} onClick={() => !disabled && onPick(d)}
                 aria-current={isToday ? "date" : undefined}
                 aria-pressed={isSel}
-                aria-label={`${d} ${DOW[new Date(year, month, d).getDay()]}${status?.[d] ? ` · ${STATUS_LABEL[status[d]]}` : ""}${hasTasks ? " · มีงาน" : ""}`}
+                aria-label={`${d} ${DOW[new Date(Date.UTC(year, month, d)).getUTCDay()]}${status?.[d] ? ` · ${STATUS_LABEL[status[d]]}` : ""}${hasTasks ? " · มีงาน" : ""}`}
                 className={`font-grotesk relative flex flex-col items-center justify-center rounded-lg ${EASE} ${pickMode ? "h-11 text-sm" : "h-8 text-[11px]"} ${cls} ${(pickMode || isSel) && isToday && !disabled ? "ring-2 ring-[var(--flow-lime)]" : ""}`}>
                 {d}
                 {!pickMode && status?.[d] && !isSel && <span className="absolute right-1 top-0.5 text-[8px] font-bold leading-none">{STATUS_MARK[status[d]]}</span>}
@@ -77,7 +77,7 @@ export function MonthGrid({ year, month, load, onPick, selected, labels, compact
       <div className="mt-1 grid grid-cols-7 gap-1">
         {cells.map((d, i) => d === null ? <div key={i} /> : (
           <button key={i} onClick={() => onPick(d)} aria-current={today === d ? "date" : undefined} aria-pressed={selected === d}
-            aria-label={`${d} ${DOW[new Date(year, month, d).getDay()]}${status?.[d] ? ` · ${STATUS_LABEL[status[d]]}` : ""}${load[d] != null ? " · มีงาน" : ""}`}
+            aria-label={`${d} ${DOW[new Date(Date.UTC(year, month, d)).getUTCDay()]}${status?.[d] ? ` · ${STATUS_LABEL[status[d]]}` : ""}${load[d] != null ? " · มีงาน" : ""}`}
             className={`font-grotesk relative aspect-square rounded-lg border text-xs transition-[transform,background-color,border-color] duration-200 ${selected===d?"border-[var(--flow-ink)] border-[1.5px]":status?.[d]?STATUS_CELL[status[d]]:"flow-hairline"}`}>
             <span className="absolute left-1 top-1">{d}</span>
             {status?.[d] && selected !== d && <span className="absolute right-1 top-1 text-[9px] font-bold leading-none">{STATUS_MARK[status[d]]}</span>}

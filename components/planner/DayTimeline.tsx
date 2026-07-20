@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, Clock3, GripHorizontal, GripVertical, Route, Trash2 } from "lucide-react";
 import type { Category, Task } from "@/lib/types";
-import { endTime, localDateKey, minutesToTime, snapMinutes, timeToMinutes } from "@/lib/time";
+import { endTime, localDateKey, localTimeKey, minutesToTime, snapMinutes, timeToMinutes } from "@/lib/time";
 
 const PRIORITY_LABEL = { urgent: "ด่วน", high: "สำคัญ", normal: "ปกติ", flex: "ยืดหยุ่น" } as const;
 
@@ -45,7 +45,7 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
 
   scheduled.forEach((task, index) => {
     const next = scheduled[index + 1];
-    if (next && timeToMinutes(task.fixedTime ?? "00:00") + (task.durationMin ?? 60) > timeToMinutes(next.fixedTime ?? "00:00")) {
+    if (next && task.durationMin != null && timeToMinutes(task.fixedTime ?? "00:00") + task.durationMin > timeToMinutes(next.fixedTime ?? "00:00")) {
       collisions.add(task.id);
       collisions.add(next.id);
     }
@@ -105,7 +105,7 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
     </article>
   );
 
-  const currentMinutes = (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); })();
+  const currentMinutes = timeToMinutes(localTimeKey());
   const showNow = date === localDateKey() && currentMinutes >= startHour * 60 && currentMinutes <= endHour * 60;
 
   return (
@@ -120,6 +120,7 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
           {showNow && <div className="pointer-events-none absolute inset-x-10 z-20 flex items-center" style={{ top: `${((currentMinutes - startHour * 60) / totalMinutes) * 100}%` }}><span className="h-2.5 w-2.5 rounded-full bg-[var(--flow-lime-dark)] ring-2 ring-[var(--flow-paper)]"/><span className="h-0.5 flex-1 bg-[var(--flow-lime-dark)]"/><span className="font-grotesk ml-1 rounded bg-[var(--flow-lime)] px-1.5 py-0.5 text-[9px] font-bold text-[#111111]">NOW</span></div>}
           {scheduled.map((task) => {
             const isDragging = drag?.id === task.id;
+            const awaitingDuration = task.durationMin == null && !isDragging;
             const start = isDragging ? drag.previewMin : timeToMinutes(task.fixedTime ?? "00:00");
             const duration = isDragging ? drag.previewDuration : task.durationMin ?? 60;
             const top = clamp(((start - startHour * 60) / totalMinutes) * 100, 0, 100);
@@ -134,9 +135,9 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
                     const startMin = timeToMinutes(task.fixedTime ?? "00:00");
                     if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); commitKeyboard(task, startMin, Math.max(15, (task.durationMin ?? 60) + (event.key === "ArrowUp" ? -15 : 15))); return; }
                     if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); commitKeyboard(task, clamp(startMin + (event.key === "ArrowUp" ? -15 : 15), startHour * 60, endHour * 60 - (task.durationMin ?? 60)), task.durationMin ?? 60); }
-                  }} className="touch-none flex h-full w-full items-start gap-1.5 overflow-hidden px-2 py-2 pr-12 text-left focus-visible:z-20" aria-label={`${task.title} เวลา ${minutesToTime(start)} ถึง ${endTime(minutesToTime(start), duration)} ใช้ลูกศรขึ้นลงเพื่อย้าย 15 นาที หรือ Shift พร้อมลูกศรเพื่อปรับระยะเวลา`}>
+                  }} className="touch-none flex h-full w-full items-start gap-1.5 overflow-hidden px-2 py-2 pr-12 text-left focus-visible:z-20" aria-label={`${task.title} เวลา ${minutesToTime(start)}${awaitingDuration ? " ระยะเวลารอ AI ประเมิน" : ` ถึง ${endTime(minutesToTime(start), duration)}`} ใช้ลูกศรขึ้นลงเพื่อย้าย 15 นาที หรือ Shift พร้อมลูกศรเพื่อปรับระยะเวลา`}>
                     <GripVertical size={14} className="mt-0.5 shrink-0 text-[var(--flow-muted)]" aria-hidden />
-                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{task.aiAdded && <Route size={13} className="mr-1 inline text-[var(--flow-lime-dark)]" aria-label="Travel block ที่ AI เพิ่ม"/>}{task.title}</span><span className="font-grotesk block text-[10px] text-[var(--flow-muted)]">{minutesToTime(start)}–{endTime(minutesToTime(start), duration)} · {duration}m</span>{collisions.has(task.id) && <span className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-[var(--flow-warning)]"><AlertTriangle size={10} aria-hidden />เวลาชน</span>}</span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{task.aiAdded && <Route size={13} className="mr-1 inline text-[var(--flow-lime-dark)]" aria-label="Travel block ที่ AI เพิ่ม"/>}{task.title}</span><span className="font-grotesk block text-[10px] text-[var(--flow-muted)]">{awaitingDuration ? `${minutesToTime(start)} · รอ AI ประเมินระยะเวลา` : `${minutesToTime(start)}–${endTime(minutesToTime(start), duration)} · ${duration}m`}</span>{collisions.has(task.id) && <span className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-[var(--flow-warning)]"><AlertTriangle size={10} aria-hidden />เวลาชน</span>}</span>
                   </button>
                   <button type="button" onPointerDown={(event) => beginDrag(event, task, "resize")} onPointerMove={updateDrag} onPointerUp={(event) => finishDrag(event, task)} onPointerCancel={cancelDrag} onKeyDown={(event)=>{if(event.key!=="ArrowUp"&&event.key!=="ArrowDown")return;event.preventDefault();const nextDuration=Math.max(15,(task.durationMin??60)+(event.key==="ArrowUp"?-15:15));commitKeyboard(task,timeToMinutes(task.fixedTime??"00:00"),nextDuration);}} onClick={(event)=>{if(event.detail===0)commitKeyboard(task,timeToMinutes(task.fixedTime??"00:00"),(task.durationMin??60)+15);}} className="touch-none absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center rounded-tl-xl border-l border-t flow-hairline bg-[var(--flow-surface)]" aria-label={`ปรับระยะเวลา ${task.title} ใช้ลูกศรขึ้นลง หรือกดเพื่อเพิ่ม 15 นาที`}><GripHorizontal size={16} aria-hidden /></button>
                 </article>

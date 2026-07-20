@@ -1,50 +1,44 @@
 import type { RecurrenceRule, Task } from "@/lib/types";
-import { localDateKey } from "@/lib/time";
-
-function addDays(date: Date, days: number): Date {
-  const next = new Date(date);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function monthsBetween(start: Date, current: Date): number {
-  return (current.getFullYear() - start.getFullYear()) * 12 + current.getMonth() - start.getMonth();
-}
+import { addDaysToDateKey, parseDateKey } from "@/lib/time";
 
 export function matchesRecurrence(dateKey: string, rule: RecurrenceRule): boolean {
   if (dateKey < rule.startDate || (rule.endDate && dateKey > rule.endDate) || rule.excludedDates.includes(dateKey)) return false;
-  const start = new Date(`${rule.startDate}T12:00:00`);
-  const current = new Date(`${dateKey}T12:00:00`);
-  const days = Math.round((current.getTime() - start.getTime()) / 86_400_000);
+  const startParts = parseDateKey(rule.startDate);
+  const currentParts = parseDateKey(dateKey);
+  if (!startParts || !currentParts) return false;
+  const start = Date.UTC(startParts.year, startParts.month - 1, startParts.day);
+  const current = Date.UTC(currentParts.year, currentParts.month - 1, currentParts.day);
+  const days = Math.round((current - start) / 86_400_000);
   if (days < 0) return false;
   if (rule.frequency === "daily") return days % rule.interval === 0;
   if (rule.frequency === "weekly") {
     const week = Math.floor(days / 7);
-    const weekdays = rule.weekdays.length ? rule.weekdays : [start.getDay()];
-    return week % rule.interval === 0 && weekdays.includes(current.getDay());
+    const startWeekday = new Date(start).getUTCDay();
+    const currentWeekday = new Date(current).getUTCDay();
+    const weekdays = rule.weekdays.length ? rule.weekdays : [startWeekday];
+    return week % rule.interval === 0 && weekdays.includes(currentWeekday);
   }
   if (rule.frequency === "monthly") {
-    const day = rule.monthDay ?? start.getDate();
-    return monthsBetween(start, current) % rule.interval === 0 && current.getDate() === day;
+    const day = rule.monthDay ?? startParts.day;
+    const months = (currentParts.year - startParts.year) * 12 + currentParts.month - startParts.month;
+    return months % rule.interval === 0 && currentParts.day === day;
   }
-  const years = current.getFullYear() - start.getFullYear();
-  return years % rule.interval === 0 && current.getMonth() === start.getMonth() && current.getDate() === start.getDate();
+  const years = currentParts.year - startParts.year;
+  return years % rule.interval === 0 && currentParts.month === startParts.month && currentParts.day === startParts.day;
 }
 
 export function occurrencesForRange(template: Task, rule: RecurrenceRule, from: string, to: string): Task[] {
   const results: Task[] = [];
-  let cursor = new Date(`${from}T12:00:00`);
-  const end = new Date(`${to}T12:00:00`);
+  let cursor = from;
   let matched = 0;
-  while (cursor <= end) {
-    const date = localDateKey(cursor);
-    if (matchesRecurrence(date, rule)) {
+  while (cursor <= to) {
+    if (matchesRecurrence(cursor, rule)) {
       matched += 1;
       if (!rule.count || matched <= rule.count) {
-        results.push({ ...template, id: `${template.id}@${date}`, seriesId: rule.id, occurrenceDate: date, originalDate: date });
+        results.push({ ...template, id: `${template.id}@${cursor}`, seriesId: rule.id, occurrenceDate: cursor, originalDate: cursor });
       }
     }
-    cursor = addDays(cursor, 1);
+    cursor = addDaysToDateKey(cursor, 1);
   }
   return results;
 }

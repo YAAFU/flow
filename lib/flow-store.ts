@@ -11,6 +11,8 @@ function emit() { listeners.forEach((listener) => listener()); }
 
 export function getFlowState(): FlowState { return state; }
 export function getServerFlowState(): FlowState { return state; }
+export function isFlowHydrated(): boolean { return hydrated; }
+export function getServerHydrated(): boolean { return false; }
 export function subscribeFlow(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -24,13 +26,12 @@ export function hydrateFlow(): void {
 }
 
 export function updateFlow(updater: (previous: FlowState) => FlowState): void {
-  state = updater(state);
-  if (typeof window !== "undefined") state = saveState(window.localStorage, state);
+  const next = updater(state);
+  state = typeof window !== "undefined" ? saveState(window.localStorage, next) : next;
   emit();
 }
 
 export function replaceFlow(next: FlowState): void {
-  state = next;
-  if (typeof window !== "undefined") state = saveState(window.localStorage, state);
+  state = typeof window !== "undefined" ? saveState(window.localStorage, next) : next;
   emit();
 }

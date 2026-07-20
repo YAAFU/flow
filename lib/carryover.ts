@@ -1,8 +1,9 @@
 import type { Task } from "@/lib/types";
+import { localDateKey, localTimeKey } from "@/lib/time";
 
 export function carryTask(task: Task, fromDate: string, toDate: string, mode: "move" | "duplicate", now = new Date()): Task {
   const id = mode === "duplicate" ? `${task.id}-copy-${now.getTime().toString(36)}` : task.id;
-  const timeIsPast = toDate === now.toISOString().slice(0, 10) && task.fixedTime && task.fixedTime < now.toTimeString().slice(0, 5);
+  const timeIsPast = toDate === localDateKey(now) && task.fixedTime && task.fixedTime < localTimeKey(now);
   return {
     ...task,
     id,

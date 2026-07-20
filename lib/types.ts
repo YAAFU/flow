@@ -12,7 +12,7 @@ export const TaskSchema = z.object({
   lat: z.number().optional(),
   lng: z.number().optional(),
   fixedTime: TimeSchema.optional(),
-  durationMin: z.number().int().min(15).max(24 * 60).optional(),
+  durationMin: z.number().int().min(1).max(24 * 60).optional(),
   allDay: z.boolean().default(false),
   lockTime: z.boolean().default(false),
   deadlineDate: IsoDateSchema.optional(),

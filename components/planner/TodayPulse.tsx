@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, CheckCircle2, Clock3, Coffee, Play } from "lucide-react";
-import { endTime, localDateKey, timeToMinutes } from "@/lib/time";
+import { endTime, localDateKey, localTimeKey, timeToMinutes } from "@/lib/time";
 import type { Task } from "@/lib/types";
 
 function Remaining({ minutes }: { minutes: number }) {
@@ -22,25 +22,27 @@ export function TodayPulse({ date, tasks, startHour, endHour, onOpenTimeline, on
 }) {
   const now = new Date();
   const isToday = date === localDateKey(now);
-  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowMin = timeToMinutes(localTimeKey(now));
   const scheduled = tasks
     .filter((task) => task.fixedTime && !task.allDay && !task.done)
     .sort((a, b) => (a.fixedTime ?? "").localeCompare(b.fixedTime ?? ""));
   const current = isToday
     ? scheduled.find((task) => {
         const start = timeToMinutes(task.fixedTime ?? "00:00");
-        return start <= nowMin && start + (task.durationMin ?? 60) > nowMin;
+        return task.durationMin != null && start <= nowMin && start + task.durationMin > nowMin;
       })
     : undefined;
   const next = scheduled.find((task) => !isToday || timeToMinutes(task.fixedTime ?? "00:00") > nowMin);
   const usedFuture = scheduled.reduce((sum, task) => {
+    if (task.durationMin == null) return sum;
     const start = timeToMinutes(task.fixedTime ?? "00:00");
-    const end = start + (task.durationMin ?? 60);
+    const end = start + task.durationMin;
     const from = isToday ? Math.max(start, nowMin, startHour * 60) : Math.max(start, startHour * 60);
     return sum + Math.max(0, Math.min(end, endHour * 60) - from);
   }, 0);
   const windowStart = isToday ? Math.max(nowMin, startHour * 60) : startHour * 60;
   const freeMinutes = Math.max(0, endHour * 60 - windowStart - usedFuture);
+  const awaitingDuration = scheduled.some((task) => task.durationMin == null);
   const untilNext = next && isToday ? timeToMinutes(next.fixedTime ?? "00:00") - nowMin : null;
 
   return (
@@ -59,7 +61,7 @@ export function TodayPulse({ date, tasks, startHour, endHour, onOpenTimeline, on
           <p className="mt-1 truncate text-xl font-bold leading-tight">{current?.title ?? next?.title ?? "ยังไม่มีงานที่กำหนดเวลา"}</p>
           <p className="mt-2 flex items-center gap-1.5 text-xs opacity-70">
             <Clock3 size={14} aria-hidden />
-            {current?.fixedTime ? <span className="font-grotesk">{current.fixedTime}–{endTime(current.fixedTime, current.durationMin ?? 60)}</span> : next?.fixedTime ? <>เริ่ม <span className="font-grotesk">{next.fixedTime}</span></> : "เพิ่มงานเมื่อพร้อม"}
+            {current?.fixedTime && current.durationMin != null ? <span className="font-grotesk">{current.fixedTime}–{endTime(current.fixedTime, current.durationMin)}</span> : next?.fixedTime ? <>เริ่ม <span className="font-grotesk">{next.fixedTime}</span>{next.durationMin == null ? " · รอ AI ประเมินระยะเวลา" : null}</> : "เพิ่มงานเมื่อพร้อม"}
           </p>
         </div>
         <button type="button" onClick={onStartFocus} className="flow-press grid h-12 w-12 place-items-center self-center rounded-2xl bg-[var(--flow-lime)] text-[#111111]" aria-label="เปิดโหมดโฟกัส"><Play size={19} fill="currentColor" /></button>
@@ -75,6 +77,7 @@ export function TodayPulse({ date, tasks, startHour, endHour, onOpenTimeline, on
           <p className="flex items-center gap-1.5 text-xs opacity-60"><Coffee size={14} aria-hidden />เวลาว่างที่เหลือ</p>
           <p className="mt-1 text-xl font-bold text-[var(--flow-lime)]"><Remaining minutes={freeMinutes} /></p>
           <p className="mt-1 text-[10px] opacity-55">ถึง <span className="font-grotesk">{String(endHour).padStart(2, "0")}:00</span></p>
+          {awaitingDuration && <p className="mt-1 text-[10px] opacity-55">ไม่รวมงานที่รอ AI ประเมินระยะเวลา</p>}
         </div>
       </div>
 

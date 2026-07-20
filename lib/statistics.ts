@@ -1,4 +1,5 @@
 import type { FocusSession, Task } from "@/lib/types";
+import { localDateKey } from "@/lib/time";
 
 export interface FlowStatistics {
   total: number;
@@ -14,10 +15,10 @@ export function calculateStatistics(tasksByDay: Record<string, Task[]>, focusSes
   const tasks = Object.entries(tasksByDay).filter(([date]) => date >= from && date <= to).flatMap(([, items]) => items);
   const completed = tasks.filter((task) => task.done);
   const focusMinutes = focusSessions.filter((session) => {
-    const date = session.startedAt.slice(0, 10);
+    const date = localDateKey(new Date(session.startedAt));
     return date >= from && date <= to;
   }).reduce((sum, session) => sum + (session.actualMin ?? 0), 0);
-  const nowKey = now.toISOString().slice(0, 10);
+  const nowKey = localDateKey(now);
   return {
     total: tasks.length,
     completed: completed.length,

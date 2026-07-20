@@ -1,4 +1,5 @@
 import type { FlowState, Task } from "@/lib/types";
+import { addDaysToDateKey, combineLocalDateTime, localDateKey, localTimeKey } from "@/lib/time";
 
 function csvCell(value: string | number | boolean | undefined): string {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -22,9 +23,8 @@ function icsDate(date: string, time?: string): string {
 function eventLines(date: string, task: Task): string[] {
   const start = icsDate(date, task.fixedTime);
   const duration = task.durationMin ?? 60;
-  const endDate = new Date(`${date}T${task.fixedTime ?? "00:00"}:00`);
-  endDate.setMinutes(endDate.getMinutes() + duration);
-  const end = task.allDay ? icsDate(date) : icsDate(endDate.toISOString().slice(0, 10), endDate.toTimeString().slice(0, 5));
+  const endDate = new Date(combineLocalDateTime(date, task.fixedTime ?? "00:00").getTime() + duration * 60_000);
+  const end = task.allDay ? icsDate(addDaysToDateKey(date, 1)) : icsDate(localDateKey(endDate), localTimeKey(endDate));
   return ["BEGIN:VEVENT", `UID:${icsEscape(task.id)}@flow.local`, `DTSTAMP:${new Date().toISOString().replaceAll(/[-:]/g, "").replace(".000", "")}`, `${task.allDay ? "DTSTART;VALUE=DATE" : "DTSTART;TZID=Asia/Bangkok"}:${start}`, `${task.allDay ? "DTEND;VALUE=DATE" : "DTEND;TZID=Asia/Bangkok"}:${end}`, `SUMMARY:${icsEscape(task.title)}`, `LOCATION:${icsEscape(task.place)}`, `DESCRIPTION:${icsEscape(task.note ?? "")}`, "END:VEVENT"];
 }
 

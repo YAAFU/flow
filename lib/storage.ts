@@ -1,12 +1,17 @@
 import {
   AppSettingsSchema,
+  ActiveFocusSessionSchema,
   CategorySchema,
+  DayMetaSchema,
   FlowStateSchema,
+  FocusSessionSchema,
+  RecurrenceRuleSchema,
+  ReminderLogSchema,
   type FlowState,
   type StoredTask,
   TaskSchema,
 } from "@/lib/types";
-import { localDateKey } from "@/lib/time";
+import { localDateKey, parseDateKey } from "@/lib/time";
 
 export const STATE_KEY = "flow_state_v2";
 export const LEGACY_TASKS_KEY = "flow_tasks_v1";
@@ -44,14 +49,14 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function normalizeLegacyTask(value: unknown, date: string, order: number, now: string): StoredTask | null {
   if (!isRecord(value) || typeof value.title !== "string" || !value.title.trim()) return null;
-  const priority = value.priority === "high" || value.priority === "flex" ? value.priority : "normal";
+  const priority = value.priority === "urgent" || value.priority === "high" || value.priority === "flex" ? value.priority : "normal";
   const candidate = {
     ...value,
     id: typeof value.id === "string" ? value.id : stableId("task", `${date}-${order}-${value.title}`),
     title: value.title.trim(),
     place: typeof value.place === "string" ? value.place : "",
     priority,
-    durationMin: typeof value.durationMin === "number" ? Math.max(15, Math.round(value.durationMin)) : undefined,
+    durationMin: typeof value.durationMin === "number" && value.durationMin > 0 ? Math.min(24 * 60, Math.max(1, Math.round(value.durationMin))) : undefined,
     allDay: value.allDay === true,
     lockTime: value.lockTime === true,
     reminderOffsets: Array.isArray(value.reminderOffsets) ? value.reminderOffsets : [],
@@ -87,13 +92,36 @@ export function migrateState(value: unknown, now = new Date()): FlowState {
     ? value.categories.map((category) => CategorySchema.safeParse(category)).filter((result) => result.success).map((result) => result.data)
     : base.categories;
   const settings = AppSettingsSchema.safeParse(value.settings);
-  return {
+  const recurrenceRules = Array.isArray(value.recurrenceRules)
+    ? value.recurrenceRules.map((item) => RecurrenceRuleSchema.safeParse(item)).filter((result) => result.success).map((result) => result.data)
+    : base.recurrenceRules;
+  const dayMetaByDay: FlowState["dayMetaByDay"] = {};
+  if (isRecord(value.dayMetaByDay)) {
+    for (const [date, meta] of Object.entries(value.dayMetaByDay)) {
+      const parsed = DayMetaSchema.safeParse(meta);
+      if (parsed.success && parseDateKey(date)) dayMetaByDay[date] = parsed.data;
+    }
+  }
+  const focusSessions = Array.isArray(value.focusSessions)
+    ? value.focusSessions.map((item) => FocusSessionSchema.safeParse(item)).filter((result) => result.success).map((result) => result.data)
+    : base.focusSessions;
+  const activeFocusSession = ActiveFocusSessionSchema.safeParse(value.activeFocusSession);
+  const reminderLog = Array.isArray(value.reminderLog)
+    ? value.reminderLog.map((item) => ReminderLogSchema.safeParse(item)).filter((result) => result.success).map((result) => result.data)
+    : base.reminderLog;
+  return FlowStateSchema.parse({
     ...base,
     tasksByDay,
     categories: categories.length ? categories : base.categories,
+    recurrenceRules,
+    dayMetaByDay,
+    focusSessions,
+    activeFocusSession: activeFocusSession.success ? activeFocusSession.data : undefined,
     settings: settings.success ? settings.data : base.settings,
-    selectedDate: typeof value.selectedDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value.selectedDate) ? value.selectedDate : base.selectedDate,
-  };
+    reminderLog,
+    selectedDate: typeof value.selectedDate === "string" && parseDateKey(value.selectedDate) ? value.selectedDate : base.selectedDate,
+    updatedAt: typeof value.updatedAt === "string" && Number.isFinite(Date.parse(value.updatedAt)) ? new Date(value.updatedAt).toISOString() : base.updatedAt,
+  });
 }
 
 export interface StorageLike {
@@ -109,7 +137,10 @@ function parseJson(raw: string | null): unknown {
 
 export function loadState(storage: StorageLike, now = new Date()): FlowState {
   const currentRaw = storage.getItem(STATE_KEY);
-  if (currentRaw) return migrateState(parseJson(currentRaw), now);
+  if (currentRaw) {
+    const parsed = parseJson(currentRaw);
+    if (isRecord(parsed)) return migrateState(parsed, now);
+  }
   const legacyRaw = storage.getItem(LEGACY_TASKS_KEY);
   if (!legacyRaw) return createDefaultState(now);
   storage.setItem(BACKUP_KEY, legacyRaw);

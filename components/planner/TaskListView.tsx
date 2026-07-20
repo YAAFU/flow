@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clock3, MapPin, Plus, X } from "lucide-react";
+import { Check, Clock3, LockKeyhole, MapPin, Pencil, Plus, X } from "lucide-react";
 import type { Category, Task } from "@/lib/types";
 
 const PRIORITY = {
@@ -10,10 +10,19 @@ const PRIORITY = {
   flex: { label: "ยืดหยุ่น", rail: "border border-dashed border-[var(--flow-line)]", badge: "border border-dashed flow-hairline" },
 } as const;
 
-export function TaskListView({ tasks, categories, onToggle, onDelete, onAdd }: {
+function formatDuration(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (!hours) return `${rest} นาที`;
+  if (!rest) return `${hours} ชม.`;
+  return `${hours} ชม. ${rest} นาที`;
+}
+
+export function TaskListView({ tasks, categories, onToggle, onEdit, onDelete, onAdd }: {
   tasks: Task[];
   categories: Category[];
   onToggle: (id: string) => void;
+  onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onAdd: () => void;
 }) {
@@ -46,13 +55,18 @@ export function TaskListView({ tasks, categories, onToggle, onDelete, onAdd }: {
                   <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${priority.badge}`}>{priority.label}</span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--flow-muted)]">
-                  <span className="flex items-center gap-1"><Clock3 size={13} aria-hidden /><span className="font-grotesk">{task.allDay ? "ALL DAY" : task.fixedTime ?? "UNSCHEDULED"}</span></span>
+                  <span className="flex items-center gap-1"><Clock3 size={13} aria-hidden /><span>{task.allDay ? "ทั้งวัน" : task.fixedTime ? <span className="font-grotesk">{task.fixedTime}</span> : "ให้ AI จัดเวลา"}</span></span>
+                  {task.durationMin != null && <span>{formatDuration(task.durationMin)}</span>}
+                  {task.lockTime && <span className="flex items-center gap-1"><LockKeyhole size={12} aria-hidden />ล็อกเวลา</span>}
                   {task.place && <span className="flex min-w-0 items-center gap-1"><MapPin size={13} aria-hidden /><span className="truncate">{task.place}</span></span>}
                   {task.categoryId && names.get(task.categoryId) && <span>{names.get(task.categoryId)}</span>}
                 </div>
                 {task.deadlineDate && <p className="mt-2 text-xs text-[var(--flow-warning)]">เส้นตาย <span className="font-grotesk">{task.deadlineDate} {task.deadlineTime}</span></p>}
               </div>
-              <button aria-label={`ลบ ${task.title}`} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-[var(--flow-muted)] hover:bg-[var(--flow-surface)] hover:text-[var(--flow-ink)]" onClick={() => onDelete(task.id)}><X size={17} /></button>
+              <div className="flex shrink-0 flex-col sm:flex-row">
+                <button type="button" aria-label={`แก้ไข ${task.title}`} className="grid h-11 w-11 place-items-center rounded-xl text-[var(--flow-muted)] hover:bg-[var(--flow-surface)] hover:text-[var(--flow-ink)]" onClick={() => onEdit(task.id)}><Pencil size={16} /></button>
+                <button type="button" aria-label={`ลบ ${task.title}`} className="grid h-11 w-11 place-items-center rounded-xl text-[var(--flow-muted)] hover:bg-[var(--flow-surface)] hover:text-[var(--flow-ink)]" onClick={() => onDelete(task.id)}><X size={17} /></button>
+              </div>
             </div>
           </article>
         );
