@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { client, MODEL_SMART, extractJson } from "@/lib/claude";
-import { PlanResultSchema, TaskSchema, type Task } from "@/lib/types";
-import { FALLBACK_PLAN } from "@/lib/fixtures";
+import { AI_TIMEOUT_MS, client, MODEL_SMART, extractJson, withTimeout } from "@/lib/claude";
+import { DayEnergySchema, IsoDateSchema, PlanResultSchema, TaskSchema, TimeSchema, type Task } from "@/lib/types";
 import { controlBreakdown, freeTimeMin } from "@/lib/score";
 import { durationTable } from "@/lib/osrm";
+import { buildLocalPlan } from "@/lib/local-planner";
+import { addOverlapWarnings, validatePlanTaskCoverage } from "@/lib/schedule-validation";
 import { z } from "zod";
 
 export const runtime = "nodejs";
+
+const RequestSchema = z.object({
+  tasks: z.array(TaskSchema).min(1).max(200),
+  selectedDate: IsoDateSchema.optional(),
+  energy: DayEnergySchema.optional(),
+  timezone: z.string().min(1).max(100).default("Asia/Bangkok"),
+  dayStart: TimeSchema.optional(),
+  dayEnd: TimeSchema.optional(),
+  breakMin: z.number().int().min(0).max(240).optional(),
+});
 
 const SYSTEM = `คุณคือ Flow ผู้ช่วยวางแผนวันสำหรับคนในประเทศไทย
 หลักคิด: ช่วยให้ผู้ใช้ "รู้สึกคุมเวลาได้" เพื่อลดความเครียด (อ้างอิงงานวิจัยว่าความรู้สึกควบคุมลดความเครียดได้มากกว่าผลงานที่เพิ่มขึ้น)
@@ -32,9 +43,10 @@ const SYSTEM = `คุณคือ Flow ผู้ช่วยวางแผน�
 summary + tip ภาษาไทยเป็นกันเอง เปรียบเทียบ 2 แผน; เรียก "แผนเร็วสุด"/"แผนเครียดน้อยสุด" เท่านั้น (ห้ามเรียก A/B)
 ตอบกลับเป็น JSON ตาม schema เท่านั้น ห้ามมีข้อความอื่นนอก JSON`;
 
-function userPrompt(tasks: Task[], travelBlock: string) {
+function userPrompt(tasks: Task[], travelBlock: string, constraints: { dayStart?: string; dayEnd?: string; breakMin?: number }) {
   return `งานวันนี้ (JSON; fixedTime/durationMin ที่เป็น null คือยังไม่ระบุ ให้คุณจัด/ประเมินเอง): ${JSON.stringify(tasks)}
 ${travelBlock}
+ข้อจำกัดของวัน: เริ่ม ${constraints.dayStart ?? "08:00"} จบ ${constraints.dayEnd ?? "22:00"} เว้นพักระหว่างงานอย่างน้อย ${constraints.breakMin ?? 0} นาที
 จัดตารางทั้ง 2 แผน (A=เร็วสุด, B=เครียดน้อยสุด): ประเมิน duration ที่ขาด, ตรึง anchor, เลื่อนงานที่ยืดได้, เติมงานที่จำเป็น (aiAdded=true) และเตือนถ้าตารางไม่สมจริง พร้อมจุดเสี่ยง คะแนนคุมเวลา สรุป และทิป`;
 }
 
@@ -107,21 +119,27 @@ const PLAN_SCHEMA = {
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
-  const tasks = z.array(TaskSchema).safeParse(body?.tasks);
-  if (!tasks.success) return NextResponse.json({ error: "invalid tasks" }, { status: 400 });
+  const request = RequestSchema.safeParse(body);
+  if (!request.success) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  const tasks = request.data.tasks;
+  const constraints = { dayStart: request.data.dayStart, dayEnd: request.data.dayEnd, breakMin: request.data.breakMin };
+  if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json(buildLocalPlan(tasks, constraints));
   try {
-    const travelBlock = await travelMatrix(tasks.data);
-    const msg = await client().messages.create({
+    const travelBlock = await withTimeout(travelMatrix(tasks), 6_000, "travel matrix");
+    const msg = await withTimeout(client().messages.create({
       model: MODEL_SMART,
       max_tokens: 8000,
       system: SYSTEM,
       // structured outputs: guaranteed-valid JSON matching PLAN_SCHEMA
       output_config: { format: { type: "json_schema", schema: PLAN_SCHEMA } },
-      messages: [{ role: "user", content: userPrompt(tasks.data, travelBlock) }],
-    });
+      messages: [{ role: "user", content: userPrompt(tasks, travelBlock, constraints) }],
+    }), AI_TIMEOUT_MS, "plan");
     const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-    if (msg.stop_reason === "max_tokens") console.error("[plan] response hit max_tokens (truncated JSON)");
-    const parsed = PlanResultSchema.parse(extractJson(text));
+    if (msg.stop_reason === "max_tokens") console.warn("[plan] response hit max_tokens (truncated JSON)");
+    let parsed = PlanResultSchema.parse({ ...(extractJson(text) as object), mode: "ai" });
+    const coverageIssues = validatePlanTaskCoverage(parsed, tasks);
+    if (coverageIssues.length) throw new Error(`plan task coverage invalid: ${coverageIssues.join(",")}`);
+    parsed = addOverlapWarnings(parsed);
     // override the model's scores with the deterministic formula so the
     // numbers users see are explainable (matches the breakdown in ScoreCard)
     for (const k of ["A", "B"] as const) {
@@ -131,8 +149,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json(parsed);
   } catch (e) {
-    // demo must survive: fall back to fixture - but log WHY so we can fix it
-    console.error("[plan] falling back:", e instanceof Error ? e.message : e);
-    return NextResponse.json({ ...FALLBACK_PLAN, _fallback: true });
+    console.warn("[plan] local fallback:", e instanceof Error ? e.message : e);
+    return NextResponse.json(buildLocalPlan(tasks, constraints));
   }
 }

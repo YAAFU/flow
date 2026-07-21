@@ -1,9 +1,10 @@
 import { z } from "zod";
 
 export const PrioritySchema = z.enum(["urgent", "high", "normal", "flex"]);
+export const AiModeSchema = z.enum(["ai", "local"]);
 
-const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+export const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 export const TaskSchema = z.object({
   id: z.string().min(1),
@@ -92,26 +93,27 @@ export const AppSettingsSchema = z.object({
 
 export const ScheduleItemSchema = z.object({
   taskId: z.string(),
-  title: z.string(),
+  title: z.string().min(1),
   placeLabel: z.string(),
   start: TimeSchema,
   end: TimeSchema,
-  travelFromPrevMin: z.number(),
+  travelFromPrevMin: z.number().int().min(0),
   aiAdded: z.boolean().optional(),
 });
 
 export const RiskPointSchema = z.object({ time: z.string(), reason: z.string() });
 export const PlanVariantSchema = z.object({
   schedule: z.array(ScheduleItemSchema),
-  controlScore: z.number(),
-  freeTimeMin: z.number(),
-  riskScore: z.number(),
+  controlScore: z.number().min(0).max(100),
+  freeTimeMin: z.number().min(0),
+  riskScore: z.number().min(0).max(100),
   riskPoints: z.array(RiskPointSchema),
 });
 export const PlanResultSchema = z.object({
   plans: z.object({ A: PlanVariantSchema, B: PlanVariantSchema }),
   summary: z.string(),
   tip: z.string(),
+  mode: AiModeSchema.optional(),
 });
 
 export const SlotSuggestionSchema = z.object({
@@ -145,6 +147,7 @@ export const FlowStateSchema = z.object({
 });
 
 export type Priority = z.infer<typeof PrioritySchema>;
+export type AiMode = z.infer<typeof AiModeSchema>;
 // Existing fixtures predate timestamps/defaulted fields. Keep their construction
 // source-compatible while parsing/storage always produces the normalized output.
 type TaskInput = z.input<typeof TaskSchema>;

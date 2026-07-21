@@ -37,7 +37,7 @@ try {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="th" className={grotesk.variable} suppressHydrationWarning>
+    <html lang="th" className={grotesk.variable} suppressHydrationWarning data-scroll-behavior="smooth">
       <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /></head>
       <body>{children}</body>
     </html>
