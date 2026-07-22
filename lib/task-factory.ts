@@ -1,10 +1,13 @@
-import { TaskSchema, type Priority, type Task } from "@/lib/types";
+import { TaskSchema, type LocationSource, type Priority, type Task } from "@/lib/types";
 
 export interface NewTaskInput {
   title: string;
   place?: string;
   lat?: number;
   lng?: number;
+  locationSource?: LocationSource;
+  locationAccuracy?: number;
+  locationCapturedAt?: string;
   fixedTime?: string;
   durationMin?: number;
   allDay?: boolean;

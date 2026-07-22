@@ -9,7 +9,6 @@ export const BKK_PLACES: Record<string, Place> = {
   "จตุจักร":      { name: "จตุจักร", lat: 13.7990, lng: 100.5500 },
   "อารีย์":       { name: "อารีย์", lat: 13.7790, lng: 100.5440 },
   "ประสานมิตร":   { name: "ประสานมิตร", lat: 13.7447, lng: 100.5650 },
-  "บ้าน":        { name: "บ้าน", lat: 13.7800, lng: 100.5400 },
 };
 export const BKK_CENTER = { lat: 13.7460, lng: 100.5340 };
 

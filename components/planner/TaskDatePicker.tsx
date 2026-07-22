@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MonthGrid } from "@/components/MonthGrid";
 import { FlowDialog } from "@/components/ui/flow-dialog";
@@ -10,12 +10,13 @@ import type { FlowState } from "@/lib/types";
 const pad = (value: number) => String(value).padStart(2, "0");
 const dateKey = (year: number, month: number, day: number) => `${year}-${pad(month + 1)}-${pad(day)}`;
 
-export function TaskDatePicker({ initialDate, today, tasksByDay, onPick, onClose }: {
+export function TaskDatePicker({ initialDate, today, tasksByDay, onPick, onClose, returnFocusRef }: {
   initialDate: string;
   today: string;
   tasksByDay: FlowState["tasksByDay"];
   onPick: (date: string) => void;
   onClose: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const initial = parseDateKey(initialDate) ?? parseDateKey(today)!;
   const [cursor, setCursor] = useState({ year: initial.year, month: initial.month - 1 });
@@ -38,6 +39,7 @@ export function TaskDatePicker({ initialDate, today, tasksByDay, onPick, onClose
       title="เลือกวันเพื่อสร้าง flow_ ใหม่"
       description="เลือกวันที่ตั้งแต่วันนี้เป็นต้นไป เมื่อเลือกแล้วฟอร์มเพิ่มงานจะเปิดทันที"
       onClose={onClose}
+      returnFocusRef={returnFocusRef}
     >
       <div className="mb-3 flex items-center justify-between">
         <button type="button" aria-label="เดือนก่อนหน้า" onClick={() => shiftMonth(-1)} className="flow-press grid h-11 w-11 place-items-center rounded-xl text-[var(--flow-muted)]"><ChevronLeft size={18} /></button>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKUP_KEY, LEGACY_TASKS_KEY, STATE_KEY, createDefaultState, importState, loadState, saveState, type StorageLike } from "@/lib/storage";
+import { BACKUP_KEY, LEGACY_TASKS_KEY, STATE_KEY, createDefaultState, importState, loadState, migrateState, saveState, type StorageLike } from "@/lib/storage";
 import { createTask } from "@/lib/task-factory";
 import { addTaskToDate } from "@/lib/task-state";
 
@@ -36,6 +36,27 @@ describe("storage migration", () => {
     expect(state.selectedDate).toBe("2026-07-21");
     expect(state.tasksByDay["2026-07-21"][0]).toMatchObject({ id: "old", title: "งานเดิม", priority: "urgent", lat: 13.746, lng: 100.534, durationMin: 1440 });
     expect(storage.getItem(BACKUP_KEY)).toBe(raw);
+  });
+
+  it("preserves a legacy task while discarding invalid location metadata", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LEGACY_TASKS_KEY, JSON.stringify({
+      "2026-07-21": [{
+        id: "bad-location",
+        title: "งานเดิมต้องอยู่",
+        priority: "normal",
+        place: "ชื่อที่ผู้ใช้เคยกรอก",
+        lat: 999,
+        lng: 100.5,
+        locationSource: "live",
+        locationAccuracy: -1,
+      }],
+    }));
+    const task = loadState(storage).tasksByDay["2026-07-21"][0];
+    expect(task).toMatchObject({ id: "bad-location", title: "งานเดิมต้องอยู่", place: "ชื่อที่ผู้ใช้เคยกรอก" });
+    expect(task.lat).toBeUndefined();
+    expect(task.lng).toBeUndefined();
+    expect(task.locationSource).toBeUndefined();
   });
 
   it("falls back to valid legacy data when the current JSON is corrupt", () => {
@@ -80,6 +101,71 @@ describe("storage migration", () => {
     const detailed = createTask({ title: "ประชุมทีม", place: "สยาม", lat: 13.746, lng: 100.534, fixedTime: "13:00", durationMin: 60, lockTime: true, priority: "high" }, 0, new Date("2026-07-20T01:00:00.000Z"));
     saveState(storage, { ...state, selectedDate: "2026-07-21", tasksByDay: addTaskToDate(state.tasksByDay, "2026-07-21", detailed) });
     expect(loadState(storage).tasksByDay["2026-07-21"][0]).toMatchObject({ title: "ประชุมทีม", place: "สยาม", lat: 13.746, lng: 100.534, fixedTime: "13:00", durationMin: 60, lockTime: true, priority: "high" });
+  });
+
+  it("normalizes legacy start/end aliases in an otherwise valid v2 state before Zod strips them", () => {
+    const storage = new MemoryStorage();
+    const current = createDefaultState(new Date("2026-07-20T00:00:00.000Z"));
+    storage.setItem(STATE_KEY, JSON.stringify({
+      ...current,
+      tasksByDay: {
+        "2026-07-21": [{ id: "legacy-time", title: "เรียน", place: "", priority: "normal", startTime: "13:00", endTime: "15:00" }],
+      },
+    }));
+    expect(loadState(storage).tasksByDay["2026-07-21"][0]).toMatchObject({ fixedTime: "13:00", durationMin: 120 });
+  });
+
+  it("derives a legacy duration across midnight", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LEGACY_TASKS_KEY, JSON.stringify({
+      "2026-07-21": [{ id: "overnight", title: "เดินทาง", priority: "normal", start: "23:30", end: "01:00" }],
+    }));
+    expect(loadState(storage).tasksByDay["2026-07-21"][0]).toMatchObject({ fixedTime: "23:30", durationMin: 90 });
+  });
+
+  it("does not invent a duration from an invalid or ambiguous legacy end time", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LEGACY_TASKS_KEY, JSON.stringify({
+      "2026-07-21": [
+        { id: "invalid-end", title: "งานหนึ่ง", priority: "normal", startTime: "09:00", endTime: "25:00" },
+        { id: "same-end", title: "งานสอง", priority: "normal", startTime: "09:00", endTime: "09:00" },
+      ],
+    }));
+    const tasks = loadState(storage).tasksByDay["2026-07-21"];
+    expect(tasks[0]).toMatchObject({ fixedTime: "09:00", durationMin: undefined });
+    expect(tasks[1]).toMatchObject({ fixedTime: "09:00", durationMin: undefined });
+  });
+
+  it("keeps an existing valid duration instead of replacing it from legacy end time", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LEGACY_TASKS_KEY, JSON.stringify({
+      "2026-07-21": [{ id: "existing-duration", title: "ประชุม", priority: "normal", fixedTime: "10:00", endTime: "12:00", durationMin: 45 }],
+    }));
+    expect(loadState(storage).tasksByDay["2026-07-21"][0]).toMatchObject({ fixedTime: "10:00", durationMin: 45 });
+  });
+
+  it("preserves unknown task metadata and migrates legacy aliases idempotently", () => {
+    const now = new Date("2026-07-20T00:00:00.000Z");
+    const current = createDefaultState(now);
+    const first = migrateState({
+      ...current,
+      tasksByDay: {
+        "2026-07-21": [{
+          id: "future-task",
+          title: "ข้อมูลจากเวอร์ชันอื่น",
+          priority: "normal",
+          startTime: "23:30",
+          endTime: "01:00",
+          integrationMetadata: { provider: "future-client", opaqueId: "keep-me" },
+        }],
+      },
+    }, now);
+    const second = migrateState(first, now);
+    const task = first.tasksByDay["2026-07-21"][0] as Record<string, unknown>;
+    expect(task).toMatchObject({ fixedTime: "23:30", durationMin: 90, integrationMetadata: { opaqueId: "keep-me" } });
+    expect(task).not.toHaveProperty("startTime");
+    expect(task).not.toHaveProperty("endTime");
+    expect(second).toEqual(first);
   });
 
   it("merges imports by task id", () => {

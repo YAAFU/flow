@@ -26,7 +26,7 @@ export function Timeline({ items, riskPoints }: { items: ScheduleItem[]; riskPoi
           {it.travelFromPrevMin > 0 && (
             <div className="flex items-center gap-1.5 py-1.5 pl-1.5 text-[10.5px] text-neutral-500">
               <span className="inline-block h-3.5 w-0.5 bg-[repeating-linear-gradient(#ccc_0_3px,transparent_3px_6px)]" />
-              เดินทาง ~<span className="font-grotesk">{it.travelFromPrevMin}</span> นาที · เผื่อรถติด
+              เวลาเส้นทางประมาณ <span className="font-grotesk">{it.travelFromPrevMin}</span> นาที · ไม่รวมสภาพจราจรสด
             </div>
           )}
           <div className="grid grid-cols-[46px_1fr] gap-2.5">

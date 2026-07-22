@@ -1,21 +1,24 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
 import { X } from "lucide-react";
 
 const FOCUSABLE = "button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex='-1'])";
 
-export function FlowDialog({ title, description, onClose, children, role = "dialog" }: { title: string; description?: string; onClose: () => void; children: React.ReactNode; role?: "dialog" | "alertdialog" }) {
+export function FlowDialog({ title, description, onClose, children, role = "dialog", returnFocusRef }: { title: string; description?: string; onClose: () => void; children: React.ReactNode; role?: "dialog" | "alertdialog"; returnFocusRef?: RefObject<HTMLElement | null> }) {
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef(onClose);
+  const returnFocusRefRef = useRef(returnFocusRef);
   const closeTimerRef = useRef<number | null>(null);
   const closingRef = useRef(false);
   const [closing, setClosing] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const hasExplicitReturnFocus = returnFocusRef !== undefined;
 
   useEffect(() => { closeRef.current = onClose; }, [onClose]);
+  useEffect(() => { returnFocusRefRef.current = returnFocusRef; }, [returnFocusRef]);
 
   const requestClose = useCallback(() => {
     if (closingRef.current) return;
@@ -49,9 +52,18 @@ export function FlowDialog({ title, description, onClose, children, role = "dial
       if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = oldOverflow;
-      previous?.focus();
+      // A trigger may be conditionally unmounted while this dialog is open.
+      // Wait until the closing render has mounted it again before restoring focus.
+      if (hasExplicitReturnFocus) {
+        requestAnimationFrame(() => {
+          const target = returnFocusRefRef.current?.current;
+          if (target?.isConnected && !target.matches(":disabled")) target.focus({ preventScroll: true });
+        });
+      } else if (previous?.isConnected) {
+        previous.focus({ preventScroll: true });
+      }
     };
-  }, [requestClose]);
+  }, [hasExplicitReturnFocus, requestClose]);
 
   useEffect(() => {
     const viewport = window.visualViewport;

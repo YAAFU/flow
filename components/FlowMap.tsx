@@ -6,11 +6,11 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { ScheduleItem } from "@/lib/types";
 import { resolvePlace, BKK_CENTER } from "@/lib/places";
+import { travelLegDisplay, type RoadLeg } from "@/lib/osrm";
 
 const STYLE = "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json"; // no-key monochrome
 
-type Stop = { label: string; lat?: number; lng?: number; travelFromPrevMin: number; start: string; end: string };
-type Leg = { durationMin: number; distanceKm: number };
+type Stop = { label: string; lat?: number; lng?: number; start: string; end: string };
 
 // names already geocoded this session (null = Nominatim couldn't find it either)
 const geoCache = new Map<string, { lat: number; lng: number } | null>();
@@ -22,14 +22,15 @@ export function FlowMap({ items, coords, focus: focusProp, onFocus }: { items: S
   const [focusState, setFocusState] = useState(-1); // -1 = overview, else stop index
   const focus = focusProp ?? focusState;
   const setFocus = onFocus ?? setFocusState;
-  const [legs, setLegs] = useState<Leg[]>([]);
+  const [legs, setLegs] = useState<RoadLeg[]>([]);
+  const [routeUnavailable, setRouteUnavailable] = useState(false);
   const [, setGeoVersion] = useState(0); // bump to re-render when geoCache gains entries
 
   // keep EVERY schedule item so stop numbers always match the plan order -
   // unresolved places just have no pin instead of silently shifting the numbering
   const stops: Stop[] = items.map((it) => {
     const p = coords?.[it.taskId] ?? resolvePlace(it.placeLabel) ?? geoCache.get(it.placeLabel) ?? undefined;
-    return { label: it.placeLabel, lat: p?.lat, lng: p?.lng, travelFromPrevMin: it.travelFromPrevMin, start: it.start, end: it.end };
+    return { label: it.placeLabel, lat: p?.lat, lng: p?.lng, start: it.start, end: it.end };
   });
 
   // names neither the task coords nor the built-in list know → ask Nominatim once
@@ -84,24 +85,36 @@ export function FlowMap({ items, coords, focus: focusProp, onFocus }: { items: S
           new maplibregl.Marker({ element: el }).setLngLat([g.lng, g.lat]).addTo(map);
         });
 
-        // real road route via OSRM (fallback to straight line inside the API)
-        let geometry: [number, number][] = located.map((l) => [l.lng, l.lat]);
+        // Only draw a route returned by the road-routing provider. Pins remain
+        // useful when routing is unavailable, but a straight line is misleading.
+        let geometry: [number, number][] = [];
         try {
           const r = await fetch("/api/route", {
             method: "POST", headers: { "content-type": "application/json" },
             body: JSON.stringify({ mode: "route", coords: located.map((l) => ({ lat: l.lat, lng: l.lng })) }),
           });
+          if (!r.ok) throw new Error("route_unavailable");
           const data = await r.json();
-          if (Array.isArray(data?.geometry) && data.geometry.length) geometry = data.geometry;
-          if (Array.isArray(data?.legs)) setLegs(data.legs);
-        } catch { /* keep straight line */ }
+          if (data?.fallback || !Array.isArray(data?.geometry) || data.geometry.length < 2) throw new Error("route_unavailable");
+          const returnedLegs = Array.isArray(data?.legs) ? data.legs : [];
+          if (returnedLegs.length !== located.length - 1 || returnedLegs.some((routeLeg: RoadLeg) => !Number.isFinite(routeLeg?.durationMin) || routeLeg.durationMin < 0 || !Number.isFinite(routeLeg?.distanceKm) || routeLeg.distanceKm < 0)) {
+            throw new Error("route_legs_unavailable");
+          }
+          geometry = data.geometry;
+          setLegs(returnedLegs);
+          setRouteUnavailable(false);
+        } catch {
+          setLegs([]);
+          setRouteUnavailable(true);
+        }
 
-        if (!map.getSource("route")) {
+        if (geometry.length >= 2 && !map.getSource("route")) {
           map.addSource("route", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: geometry }, properties: {} } });
           map.addLayer({ id: "route", type: "line", source: "route", paint: { "line-color": "#111", "line-width": 4, "line-opacity": 0.85 } });
         }
 
-        const b = geometry.reduce((bb, c) => bb.extend(c as [number, number]), new maplibregl.LngLatBounds(geometry[0] as [number, number], geometry[0] as [number, number]));
+        const boundsPoints = geometry.length ? geometry : located.map((point) => [point.lng, point.lat] as [number, number]);
+        const b = boundsPoints.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(boundsPoints[0], boundsPoints[0]));
         map.fitBounds(b, { padding: 45 });
       });
     } catch { setFailed(true); }
@@ -128,15 +141,18 @@ export function FlowMap({ items, coords, focus: focusProp, onFocus }: { items: S
     }
   }
 
-  if (failed) return <FallbackMap labels={stops.map((s) => s.label)} />;
+  if (failed) return <MapUnavailable labels={stops.map((s) => s.label)} />;
   const cur = focus >= 0 ? stops[focus] : null;
   // leg distance only when this stop and the previous one are consecutive on the road route
-  const leg = cur && focus > 0 && routeIdx[focus] != null && routeIdx[focus - 1] === routeIdx[focus] - 1
+  const routeExpected = Boolean(cur && focus > 0 && routeIdx[focus] != null && routeIdx[focus - 1] === routeIdx[focus] - 1);
+  const leg = routeExpected
     ? legs[routeIdx[focus] - 1] : null;
+  const travel = travelLegDisplay(leg, routeExpected, routeUnavailable);
 
   return (
     <div className="flex flex-col gap-2">
       <div ref={ref} className="h-[300px] w-full overflow-hidden rounded-2xl border-[1.5px] border-[var(--flow-ink)]" />
+      {routeUnavailable && <p role="status" className="rounded-xl border border-amber-600 bg-amber-50 px-3 py-2 text-xs text-amber-800">ยังไม่สามารถคำนวณหรือวาดเส้นทางถนนได้ ขณะนี้จะแสดงเฉพาะหมุดตำแหน่งโดยไม่เดาเวลาเดินทาง</p>}
 
       {/* controls + current-stop status: sticky so the active step stays visible while the list scrolls */}
       <div className="sticky top-0 z-10 -mx-1 flex flex-col gap-2 bg-white/95 px-1 pb-1 pt-1 backdrop-blur">
@@ -158,8 +174,12 @@ export function FlowMap({ items, coords, focus: focusProp, onFocus }: { items: S
           </div>
           {focus > 0 && (
             <div className="mt-1 text-xs text-neutral-600">
-              เดินทางจากจุดก่อนหน้า ~<span className="font-grotesk">{cur.travelFromPrevMin}</span> นาที
-              {leg?.distanceKm ? <> · <span className="font-grotesk">{leg.distanceKm}</span> กม.</> : null}
+              {travel.kind === "ready" ? <>
+                เดินทางจากจุดก่อนหน้า ~<span className="font-grotesk">{travel.durationMin}</span> นาที
+                {travel.distanceKm > 0 ? <> · <span className="font-grotesk">{travel.distanceKm}</span> กม.</> : null}
+              </> : travel.kind === "loading"
+                ? "กำลังคำนวณเวลาเดินทางจากจุดก่อนหน้า…"
+                : "ยังไม่สามารถคำนวณเวลาเดินทางจากจุดก่อนหน้าได้"}
             </div>
           )}
           {cur.lat == null && (
@@ -177,14 +197,12 @@ export function FlowMap({ items, coords, focus: focusProp, onFocus }: { items: S
   );
 }
 
-function FallbackMap({ labels }: { labels: string[] }) {
-  const pts = [[21, 20], [77, 40], [46, 78], [30, 55]];
+function MapUnavailable({ labels }: { labels: string[] }) {
   return (
-    <div className="relative h-[300px] overflow-hidden rounded-2xl border-[1.5px] border-[var(--flow-ink)] bg-[linear-gradient(#fafafa,#fafafa),repeating-linear-gradient(0deg,#f0f0f0_0_1px,transparent_1px_26px),repeating-linear-gradient(90deg,#f0f0f0_0_1px,transparent_1px_26px)]">
-      {labels.map((l, i) => (
-        <div key={i} className="font-grotesk absolute flex h-[30px] w-[30px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--flow-ink)] text-[13px] font-bold text-[var(--flow-lime)]"
-          style={{ left: `${pts[i % 4][0]}%`, top: `${pts[i % 4][1]}%` }}>{i + 1}</div>
-      ))}
+    <div role="status" className="min-h-[220px] rounded-2xl border-[1.5px] border-[var(--flow-ink)] bg-[var(--flow-surface)] p-5">
+      <p className="font-semibold">ยังแสดงแผนที่ไม่ได้</p>
+      <p className="mt-1 text-xs leading-5 text-[var(--flow-muted)]">ระบบจะไม่วาดตำแหน่งหรือเส้นทางจำลอง กรุณาลองใหม่เมื่อบริการแผนที่พร้อม</p>
+      {labels.length > 0 && <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-[var(--flow-muted)]">{labels.map((label, index) => <li key={`${label}-${index}`}>{label || `จุดที่ ${index + 1}`}</li>)}</ol>}
     </div>
   );
 }

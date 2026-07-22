@@ -1,5 +1,5 @@
 import { parseThaiHints } from "@/lib/natural-language";
-import { AiModeSchema, IsoDateSchema, PrioritySchema, TimeSchema } from "@/lib/types";
+import { AiModeSchema, IsoDateSchema, LocationSourceSchema, PrioritySchema, TimeSchema } from "@/lib/types";
 import { z } from "zod";
 
 const RepeatSchema = z.enum(["none", "daily", "weekly", "monthly", "yearly"]);
@@ -26,6 +26,11 @@ export const ModelParsedTaskSchema = z.object({
 export const ParsedTaskDraftSchema = z.object({
   title: z.string().trim().min(1).max(300),
   place: z.string().max(300).default(""),
+  lat: z.number().finite().min(-90).max(90).optional(),
+  lng: z.number().finite().min(-180).max(180).optional(),
+  locationSource: LocationSourceSchema.optional(),
+  locationAccuracy: z.number().finite().nonnegative().max(100_000).optional(),
+  locationCapturedAt: z.string().datetime().optional(),
   durationMin: z.number().int().min(15).max(24 * 60),
   fixedTime: TimeSchema.optional(),
   allDay: z.boolean().default(false),
@@ -37,6 +42,14 @@ export const ParsedTaskDraftSchema = z.object({
   repeat: RepeatSchema.default("none"),
   needsReview: z.boolean().default(false),
   note: z.string().max(500).default(""),
+}).superRefine((draft, context) => {
+  if ((draft.lat == null) !== (draft.lng == null)) {
+    context.addIssue({
+      code: "custom",
+      path: [draft.lat == null ? "lat" : "lng"],
+      message: "lat และ lng ต้องระบุพร้อมกัน",
+    });
+  }
 });
 
 export const ParsedTasksResponseSchema = z.object({

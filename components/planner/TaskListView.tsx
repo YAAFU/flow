@@ -56,7 +56,7 @@ export function TaskListView({ tasks, categories, onToggle, onEdit, onDelete, on
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--flow-muted)]">
                   <span className="flex items-center gap-1"><Clock3 size={13} aria-hidden /><span>{task.allDay ? "ทั้งวัน" : task.fixedTime ? <span className="font-grotesk">{task.fixedTime}</span> : "ให้ AI จัดเวลา"}</span></span>
-                  {task.durationMin != null && <span>{formatDuration(task.durationMin)}</span>}
+                  <span>{task.durationMin != null ? formatDuration(task.durationMin) : "รอ AI ประเมิน"}</span>
                   {task.lockTime && <span className="flex items-center gap-1"><LockKeyhole size={12} aria-hidden />ล็อกเวลา</span>}
                   {task.place && <span className="flex min-w-0 items-center gap-1"><MapPin size={13} aria-hidden /><span className="truncate">{task.place}</span></span>}
                   {task.categoryId && names.get(task.categoryId) && <span>{names.get(task.categoryId)}</span>}

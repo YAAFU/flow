@@ -34,4 +34,59 @@ describe("AI plan task merge", () => {
       ],
     })).toThrow("แผนมีงานซ้ำ");
   });
+
+  it("rejects a schedule that moves a locked task", () => {
+    const locked: Task = {
+      id: "locked", title: "ประชุมล็อกเวลา", place: "ออฟฟิศ", fixedTime: "13:00",
+      durationMin: 60, lockTime: true, priority: "high", order: 0,
+    };
+    expect(() => mergeScheduleIntoTasks({
+      existing: [locked], drafts: [], categories: [], now: "2026-07-21T12:00:00.000Z", createId: () => "generated",
+      schedule: [{ taskId: "locked", title: locked.title, placeLabel: locked.place, start: "13:30", end: "14:30", travelFromPrevMin: 0 }],
+    })).toThrow("แผนพยายามเลื่อนงานที่ล็อกเวลาไว้");
+  });
+
+  it("rejects a duration change but accepts the exact locked start and duration", () => {
+    const locked: Task = {
+      id: "locked", title: "ประชุมล็อกเวลา", place: "ออฟฟิศ", fixedTime: "13:00",
+      durationMin: 60, lockTime: true, priority: "high", order: 0,
+    };
+    const input = {
+      existing: [locked], drafts: [], categories: [], now: "2026-07-21T12:00:00.000Z", createId: () => "generated",
+    };
+    expect(() => mergeScheduleIntoTasks({
+      ...input,
+      schedule: [{ taskId: "locked", title: locked.title, placeLabel: locked.place, start: "13:00", end: "14:30", travelFromPrevMin: 0 }],
+    })).toThrow("แผนพยายามเปลี่ยนระยะเวลาของงานที่ล็อกไว้");
+
+    const result = mergeScheduleIntoTasks({
+      ...input,
+      schedule: [{ taskId: "locked", title: locked.title, placeLabel: locked.place, start: "13:00", end: "14:00", travelFromPrevMin: 0 }],
+    });
+    expect(result.tasks[0]).toMatchObject({ fixedTime: "13:00", durationMin: 60, lockTime: true });
+  });
+
+  it("keeps structured draft coordinates and clears stale coordinates when a place label changes", () => {
+    const locatedDraft: PersistablePlannerDraft = {
+      ...draft,
+      place: "สยาม",
+      lat: 13.746,
+      lng: 100.534,
+      locationSource: "search",
+    };
+    const created = mergeScheduleIntoTasks({
+      existing: [], drafts: [locatedDraft], categories: [], now: "2026-07-21T12:00:00.000Z", createId: () => "generated",
+      schedule: [{ taskId: plannerDraftTaskId("new"), title: "งานใหม่", placeLabel: "สยาม", start: "09:00", end: "09:30", travelFromPrevMin: 0 }],
+    });
+    expect(created.tasks[0]).toMatchObject({ place: "สยาม", lat: 13.746, lng: 100.534, locationSource: "search" });
+
+    const moved = mergeScheduleIntoTasks({
+      existing: [created.tasks[0]], drafts: [], categories: [], now: "2026-07-21T13:00:00.000Z", createId: () => "generated",
+      schedule: [{ taskId: created.tasks[0].id, title: "งานใหม่", placeLabel: "อโศก", start: "10:00", end: "10:30", travelFromPrevMin: 0 }],
+    });
+    expect(moved.tasks[0]).toMatchObject({ place: "อโศก" });
+    expect(moved.tasks[0].lat).toBeUndefined();
+    expect(moved.tasks[0].lng).toBeUndefined();
+    expect(moved.tasks[0].locationSource).toBeUndefined();
+  });
 });

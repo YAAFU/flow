@@ -22,6 +22,11 @@ export function plannerDraftToTask(
     id: plannerDraftTaskId(draft.draftId),
     title: draft.title.trim(),
     place: draft.place.trim(),
+    lat: draft.lat,
+    lng: draft.lng,
+    locationSource: draft.locationSource,
+    locationAccuracy: draft.locationAccuracy,
+    locationCapturedAt: draft.locationCapturedAt,
     fixedTime: draft.allDay ? undefined : draft.fixedTime,
     durationMin: draft.durationMin,
     allDay: draft.allDay,
@@ -85,6 +90,16 @@ export function mergeScheduleIntoTasks({
     const draft = stableId ? draftsById.get(stableId) : undefined;
     if (!existingTask && !draft && !item.aiAdded) throw new Error("แผนมีงานที่ไม่ตรงกับข้อมูลปัจจุบัน กรุณาจัดแผนใหม่");
 
+    if (existingTask?.lockTime && existingTask.fixedTime) {
+      if (item.start !== existingTask.fixedTime) {
+        throw new Error(`แผนพยายามเลื่อนงานที่ล็อกเวลาไว้: ${existingTask.title}`);
+      }
+      const plannedDuration = scheduleDurationMin(item.start, item.end);
+      if (existingTask.durationMin != null && plannedDuration !== existingTask.durationMin) {
+        throw new Error(`แผนพยายามเปลี่ยนระยะเวลาของงานที่ล็อกไว้: ${existingTask.title}`);
+      }
+    }
+
     const base = existingTask
       ?? (draft ? plannerDraftToTask(draft, order, categories, now) : TaskSchema.parse({
         id: createId(), title: item.title.trim(), place: item.placeLabel.trim(), priority: "normal",
@@ -94,10 +109,21 @@ export function mergeScheduleIntoTasks({
 
     const title = item.title.trim();
     if (!title) throw new Error("ชื่องานในแผนต้องไม่ว่าง");
+    const plannedPlace = item.placeLabel.trim();
+    const nextPlace = plannedPlace || base.place;
+    const placeChanged = nextPlace.trim() !== base.place.trim();
     return TaskSchema.parse({
       ...base,
       title,
-      place: item.placeLabel.trim() || base.place,
+      place: nextPlace,
+      // Schedule items only carry a human-readable label. Keeping coordinates
+      // after that label changes would silently attach the old place to the new
+      // name, so location metadata is preserved only while the label is stable.
+      lat: placeChanged ? undefined : base.lat,
+      lng: placeChanged ? undefined : base.lng,
+      locationSource: placeChanged ? undefined : base.locationSource,
+      locationAccuracy: placeChanged ? undefined : base.locationAccuracy,
+      locationCapturedAt: placeChanged ? undefined : base.locationCapturedAt,
       fixedTime: item.start,
       durationMin: scheduleDurationMin(item.start, item.end),
       allDay: false,

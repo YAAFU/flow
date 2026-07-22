@@ -47,16 +47,68 @@ function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+const LEGACY_TIME_KEYS = ["startTime", "start", "endTime", "end"] as const;
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function firstValidTime(...values: unknown[]): string | undefined {
+  return values.find((value): value is string => typeof value === "string" && TIME_PATTERN.test(value));
+}
+
+function legacyDurationMin(start: string | undefined, end: string | undefined): number | undefined {
+  if (!start || !end || start === end) return undefined;
+  const [startHour, startMinute] = start.split(":").map(Number);
+  const [endHour, endMinute] = end.split(":").map(Number);
+  const startTotal = startHour * 60 + startMinute;
+  const endTotal = endHour * 60 + endMinute;
+  const duration = endTotal >= startTotal ? endTotal - startTotal : (24 * 60) - startTotal + endTotal;
+  return duration > 0 && duration <= 24 * 60 ? duration : undefined;
+}
+
+function safeLegacyCoordinates(value: JsonRecord): { lat?: number; lng?: number } {
+  const lat = typeof value.lat === "number" && Number.isFinite(value.lat) && value.lat >= -90 && value.lat <= 90 ? value.lat : undefined;
+  const lng = typeof value.lng === "number" && Number.isFinite(value.lng) && value.lng >= -180 && value.lng <= 180 ? value.lng : undefined;
+  return lat != null && lng != null ? { lat, lng } : {};
+}
+
+function safeLegacyLocationSource(value: unknown) {
+  return value === "search" || value === "quick" || value === "map" || value === "live" || value === "manual" ? value : undefined;
+}
+
+function hasLegacyTaskTimes(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.tasksByDay)) return false;
+  return Object.values(value.tasksByDay).some((tasks) => Array.isArray(tasks) && tasks.some((task) =>
+    isRecord(task) && LEGACY_TIME_KEYS.some((key) => key in task),
+  ));
+}
+
 function normalizeLegacyTask(value: unknown, date: string, order: number, now: string): StoredTask | null {
   if (!isRecord(value) || typeof value.title !== "string" || !value.title.trim()) return null;
   const priority = value.priority === "urgent" || value.priority === "high" || value.priority === "flex" ? value.priority : "normal";
+  const fixedTime = firstValidTime(value.fixedTime, value.startTime, value.start);
+  const endTime = firstValidTime(value.endTime, value.end);
+  const coordinates = safeLegacyCoordinates(value);
+  const hasCoordinates = coordinates.lat != null && coordinates.lng != null;
+  const existingDuration = typeof value.durationMin === "number" && Number.isFinite(value.durationMin) && value.durationMin > 0
+    ? Math.min(24 * 60, Math.max(1, Math.round(value.durationMin)))
+    : undefined;
+  // Consume recognized legacy aliases so migration is idempotent while
+  // retaining unrelated metadata from older or future clients.
+  const preserved = Object.fromEntries(
+    Object.entries(value).filter(([key]) => !LEGACY_TIME_KEYS.includes(key as (typeof LEGACY_TIME_KEYS)[number])),
+  );
   const candidate = {
-    ...value,
+    ...preserved,
     id: typeof value.id === "string" ? value.id : stableId("task", `${date}-${order}-${value.title}`),
     title: value.title.trim(),
     place: typeof value.place === "string" ? value.place : "",
+    lat: coordinates.lat,
+    lng: coordinates.lng,
+    locationSource: hasCoordinates ? safeLegacyLocationSource(value.locationSource) : undefined,
+    locationAccuracy: hasCoordinates && typeof value.locationAccuracy === "number" && Number.isFinite(value.locationAccuracy) && value.locationAccuracy >= 0 && value.locationAccuracy <= 100_000 ? value.locationAccuracy : undefined,
+    locationCapturedAt: hasCoordinates && typeof value.locationCapturedAt === "string" && Number.isFinite(Date.parse(value.locationCapturedAt)) ? new Date(value.locationCapturedAt).toISOString() : undefined,
     priority,
-    durationMin: typeof value.durationMin === "number" && value.durationMin > 0 ? Math.min(24 * 60, Math.max(1, Math.round(value.durationMin))) : undefined,
+    fixedTime,
+    durationMin: existingDuration ?? legacyDurationMin(fixedTime, endTime),
     allDay: value.allDay === true,
     lockTime: value.lockTime === true,
     reminderOffsets: Array.isArray(value.reminderOffsets) ? value.reminderOffsets : [],
@@ -74,6 +126,20 @@ function normalizeLegacyTask(value: unknown, date: string, order: number, now: s
 }
 
 export function migrateState(value: unknown, now = new Date()): FlowState {
+  // A nominally valid v2 state can still contain legacy start/end aliases, so
+  // normalize those tasks before parsing it and consume the aliases once.
+  if (hasLegacyTaskTimes(value) && isRecord(value) && isRecord(value.tasksByDay)) {
+    const iso = now.toISOString();
+    const tasksByDay = Object.fromEntries(Object.entries(value.tasksByDay).map(([date, tasks]) => [
+      date,
+      Array.isArray(tasks)
+        ? tasks.map((task, order) => normalizeLegacyTask(task, date, order, iso) ?? task)
+        : tasks,
+    ]));
+    const normalizedCurrent = FlowStateSchema.safeParse({ ...value, tasksByDay });
+    if (normalizedCurrent.success) return normalizedCurrent.data;
+  }
+
   const current = FlowStateSchema.safeParse(value);
   if (current.success) return current.data;
 

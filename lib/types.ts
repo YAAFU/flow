@@ -6,12 +6,17 @@ export const AiModeSchema = z.enum(["ai", "local"]);
 export const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
+export const LocationSourceSchema = z.enum(["search", "quick", "map", "live", "manual"]);
+
 export const TaskSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   place: z.string().default(""),
-  lat: z.number().optional(),
-  lng: z.number().optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
+  locationSource: LocationSourceSchema.optional(),
+  locationAccuracy: z.number().nonnegative().max(100_000).optional(),
+  locationCapturedAt: z.string().datetime().optional(),
   fixedTime: TimeSchema.optional(),
   durationMin: z.number().int().min(1).max(24 * 60).optional(),
   allDay: z.boolean().default(false),
@@ -35,7 +40,7 @@ export const TaskSchema = z.object({
   originalDate: IsoDateSchema.optional(),
   createdAt: z.string().datetime().default(() => new Date().toISOString()),
   updatedAt: z.string().datetime().default(() => new Date().toISOString()),
-});
+}).catchall(z.any());
 
 export const CategorySchema = z.object({
   id: z.string().min(1),
@@ -148,6 +153,7 @@ export const FlowStateSchema = z.object({
 
 export type Priority = z.infer<typeof PrioritySchema>;
 export type AiMode = z.infer<typeof AiModeSchema>;
+export type LocationSource = z.infer<typeof LocationSourceSchema>;
 // Existing fixtures predate timestamps/defaulted fields. Keep their construction
 // source-compatible while parsing/storage always produces the normalized output.
 type TaskInput = z.input<typeof TaskSchema>;
