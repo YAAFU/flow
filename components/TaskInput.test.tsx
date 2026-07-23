@@ -54,7 +54,15 @@ async function click(element: HTMLButtonElement | undefined) {
   });
 }
 
+async function openDetails() {
+  const trigger = button("เพิ่มรายละเอียด");
+  expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+  await click(trigger);
+  expect(trigger?.getAttribute("aria-expanded")).toBe("true");
+}
+
 beforeEach(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 0));
   vi.stubGlobal("cancelAnimationFrame", (id: number) => window.clearTimeout(id));
   container = document.createElement("div");
@@ -71,6 +79,41 @@ afterEach(() => {
 });
 
 describe("TaskInput", () => {
+  it("starts with one required, visibly labelled title field and hides optional details", () => {
+    renderTaskInput();
+
+    const title = titleInput();
+    const label = container?.querySelector<HTMLLabelElement>(`label[for="${title.id}"]`);
+    expect(label?.textContent).toContain("ชื่องาน");
+    expect(label?.classList.contains("sr-only")).toBe(false);
+    expect(title.required).toBe(true);
+    expect(title.getAttribute("enterkeyhint")).toBe("done");
+    expect(button("เพิ่มรายละเอียด")?.getAttribute("aria-expanded")).toBe("false");
+    expect(button("สถานที่")).toBeUndefined();
+    expect(button("เมื่อไหร่")).toBeUndefined();
+    expect(container?.textContent).toContain("กรอกแค่ชื่องานก็เพิ่มได้");
+  });
+
+  it("shows title validation beside the field and restores focus when submitted empty", async () => {
+    renderTaskInput();
+    await click(button("เพิ่มงาน"));
+
+    const title = titleInput();
+    expect(title.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(title);
+    expect(container?.querySelector(`#${title.getAttribute("aria-describedby")?.split(" ").at(-1)}`)?.textContent).toContain("กรุณากรอกชื่องาน");
+  });
+
+  it("reveals all optional groups from one progressive-disclosure control", async () => {
+    renderTaskInput();
+    await openDetails();
+
+    expect(button("สถานที่")).toBeTruthy();
+    expect(button("เมื่อไหร่")).toBeTruthy();
+    expect(button("ความสำคัญ")).toBeTruthy();
+    expect(button("รายละเอียดเพิ่มเติม")).toBeTruthy();
+  });
+
   it("blocks saving while a requested live location is still resolving", async () => {
     const originalGeolocation = Object.getOwnPropertyDescriptor(navigator, "geolocation");
     Object.defineProperty(navigator, "geolocation", {
@@ -80,7 +123,8 @@ describe("TaskInput", () => {
     try {
       const { onAdd } = renderTaskInput();
       setInputValue(titleInput(), "งานที่มีตำแหน่ง");
-      await click(button("ที่ไหน"));
+      await openDetails();
+      await click(button("สถานที่"));
       await click(button("ใช้ตำแหน่งปัจจุบัน"));
 
       const submit = button("กำลังค้นหาตำแหน่ง");
@@ -99,7 +143,8 @@ describe("TaskInput", () => {
       const onAdd = successfulSubmitMock();
       renderTaskInput({ onAdd });
       setInputValue(titleInput(), "งานที่ไม่ต้องใช้ตำแหน่ง");
-      await click(button("ที่ไหน"));
+      await openDetails();
+      await click(button("สถานที่"));
       await click(button("ใช้ตำแหน่งปัจจุบัน"));
 
       await act(async () => {
@@ -118,6 +163,7 @@ describe("TaskInput", () => {
 
   it("never renders an editable end-time field", async () => {
     renderTaskInput();
+    await openDetails();
     await click(button("เมื่อไหร่"));
     await click(button("กำหนดเวลาเริ่มเอง"));
 
@@ -138,11 +184,26 @@ describe("TaskInput", () => {
     expect(onAdd.mock.calls[0][1]).toEqual({ frequency: "none" });
   });
 
+  it("supports the native form-submit path used when pressing Enter in the title", async () => {
+    const onAdd = successfulSubmitMock();
+    renderTaskInput({ onAdd });
+    setInputValue(titleInput(), "เตรียมเอกสาร");
+
+    await act(async () => {
+      titleInput().form?.requestSubmit();
+      await Promise.resolve();
+    });
+
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onAdd.mock.calls[0][0]).toMatchObject({ title: "เตรียมเอกสาร" });
+  });
+
   it("stores the บ้าน quick choice as a name without synthetic coordinates", async () => {
     const onAdd = successfulSubmitMock();
     renderTaskInput({ onAdd });
     setInputValue(titleInput(), "อ่านหนังสือ");
-    await click(button("ที่ไหน"));
+    await openDetails();
+    await click(button("สถานที่"));
     await click(button("บ้าน", true));
     await click(button("เพิ่มงาน"));
 
@@ -156,6 +217,7 @@ describe("TaskInput", () => {
     const onAdd = successfulSubmitMock();
     renderTaskInput({ onAdd });
     setInputValue(titleInput(), "ประชุมทีม");
+    await openDetails();
     await click(button("เมื่อไหร่"));
     await click(button("กำหนดเวลาเริ่มเอง"));
     const start = container?.querySelector<HTMLInputElement>('input[type="time"]');
@@ -239,10 +301,26 @@ describe("TaskInput", () => {
       await Promise.resolve();
     });
     expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(container?.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    expect(container?.querySelector<HTMLButtonElement>('button[type="submit"]')?.textContent).toContain("กำลังบันทึก");
+    expect(container?.querySelector('[role="status"]')?.textContent).toContain("กำลังเพิ่มงาน");
 
     await act(async () => {
       resolveSave?.();
       await pending;
     });
+  });
+
+  it("keeps the entered title and shows understandable feedback when saving fails", async () => {
+    const onAdd = vi.fn(async () => {
+      throw new Error("เชื่อมต่อไม่สำเร็จ กรุณาลองอีกครั้ง");
+    });
+    renderTaskInput({ onAdd });
+    setInputValue(titleInput(), "งานที่ต้องลองใหม่");
+    await click(button("เพิ่มงาน"));
+
+    expect(titleInput().value).toBe("งานที่ต้องลองใหม่");
+    expect(container?.querySelector('[role="alert"]')?.textContent).toContain("เชื่อมต่อไม่สำเร็จ");
+    expect(button("เพิ่มงาน")?.disabled).toBe(false);
   });
 });

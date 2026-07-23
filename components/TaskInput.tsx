@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { AlertCircle, ChevronDown, Clock3, FileText, Plus, Star } from "lucide-react";
+import { AlertCircle, ChevronDown, Clock3, FileText, Plus, SlidersHorizontal, Star } from "lucide-react";
 import { LocationDisclosure } from "@/components/location/LocationDisclosure";
 import {
   buildTaskFromFormDraft,
@@ -74,14 +74,20 @@ export function TaskInput({
 }) {
   const [draft, setDraft] = useState<TaskFormDraft>(() => taskToFormDraft(editing));
   const [location, setLocation] = useState<TaskLocation | null>(() => taskLocationFromFlat(editing ?? {}));
+  const [detailsOpen, setDetailsOpen] = useState(Boolean(editing));
   const [expanded, setExpanded] = useState<ExpandedRow>(null);
   const [customReminder, setCustomReminder] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [locationBusy, setLocationBusy] = useState(false);
   const [error, setError] = useState("");
+  const [titleTouched, setTitleTouched] = useState(false);
   const submitGuard = useRef(createSubmitGuard());
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const formId = useId();
   const titleId = `${formId}-title`;
+  const titleHintId = `${formId}-title-hint`;
+  const titleErrorId = `${formId}-title-error`;
+  const detailsId = `${formId}-details`;
   const startTimeId = `${formId}-start-time`;
   const deadlineDateId = `${formId}-deadline-date`;
   const deadlineTimeId = `${formId}-deadline-time`;
@@ -106,15 +112,25 @@ export function TaskInput({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setTitleTouched(true);
     if (locationBusy) {
       setError("กรุณารอให้ค้นหาตำแหน่งปัจจุบันเสร็จก่อนบันทึกงาน");
       return;
     }
     const validation = validateTaskFormDraft(draft);
     if (!validation.success) {
-      setError(validation.error);
-      if (validation.error.includes("เวลา") || validation.error.includes("ระยะเวลา") || validation.error.includes("ชั่วโมง") || validation.error.includes("นาที")) setExpanded("time");
-      else if (validation.error.includes("เส้นตาย") || validation.error.includes("แจ้งเตือน")) setExpanded("advanced");
+      if (!isTaskTitleValid(draft.title)) {
+        titleInputRef.current?.focus();
+      } else {
+        setError(validation.error);
+      }
+      if (validation.error.includes("เวลา") || validation.error.includes("ระยะเวลา") || validation.error.includes("ชั่วโมง") || validation.error.includes("นาที")) {
+        setDetailsOpen(true);
+        setExpanded("time");
+      } else if (validation.error.includes("เส้นตาย") || validation.error.includes("แจ้งเตือน")) {
+        setDetailsOpen(true);
+        setExpanded("advanced");
+      }
       return;
     }
     if (!submitGuard.current.tryLock()) return;
@@ -149,24 +165,54 @@ export function TaskInput({
         : "เลือกเวลาเริ่ม"
       : "ให้ AI จัดเวลา";
   const durationSummary = duration.durationMin ? `${duration.durationMin} นาที` : "รอ AI ประเมิน";
-  const advancedCount = Number(Boolean(draft.deadlineDate)) + Number(Boolean(draft.categoryId)) + draft.reminderOffsets.length + Number(Boolean(draft.note.trim()));
+  const advancedCount = Number(Boolean(draft.deadlineDate)) + Number(Boolean(draft.categoryId)) + Number(draft.repeat.frequency !== "none") + draft.reminderOffsets.length + Number(Boolean(draft.note.trim()));
+  const configuredDetailCount = Number(Boolean(location)) + Number(draft.allDay || draft.timeSet || draft.durationSet) + Number(draft.priority !== "normal") + advancedCount;
+  const titleError = titleTouched && !isTaskTitleValid(draft.title) ? "กรุณากรอกชื่องาน" : "";
 
   return (
-    <form className="flex min-w-0 flex-col gap-2.5" onSubmit={submit} noValidate>
-      <label htmlFor={titleId} className="sr-only">ชื่องาน</label>
+    <form className="flex min-w-0 flex-col gap-3 pb-[env(safe-area-inset-bottom)]" onSubmit={submit} noValidate>
+      <div>
+        <label htmlFor={titleId} className="mb-1.5 block text-sm font-semibold">
+          ชื่องาน <span aria-hidden className="text-[var(--flow-warning)]">*</span>
+        </label>
       <input
+        ref={titleInputRef}
         id={titleId}
         data-autofocus="true"
+        required
         value={draft.title}
-        onChange={(event) => { patchDraft(setDraft, { title: event.target.value }); if (error === "กรุณากรอกชื่องาน") setError(""); }}
+        onBlur={() => setTitleTouched(true)}
+        onChange={(event) => {
+          patchDraft(setDraft, { title: event.target.value });
+          if (error === "กรุณากรอกชื่องาน") setError("");
+        }}
         placeholder="ทำอะไร?"
         autoComplete="off"
-        aria-invalid={!isTaskTitleValid(draft.title) && Boolean(error)}
-        aria-describedby={error ? errorId : undefined}
-        className="w-full min-w-0 border-b-2 border-[var(--flow-ink)] bg-transparent pb-2 text-lg font-semibold outline-none placeholder:font-normal placeholder:text-[var(--flow-muted)] focus-visible:border-[var(--flow-lime-dark)]"
+        enterKeyHint="done"
+        aria-invalid={Boolean(titleError)}
+        aria-describedby={`${titleHintId}${titleError ? ` ${titleErrorId}` : ""}`}
+        className="h-13 w-full min-w-0 scroll-mt-24 rounded-xl border-[1.5px] border-[var(--flow-ink)] bg-[var(--flow-paper)] px-3 text-base font-semibold outline-none placeholder:font-normal placeholder:text-[var(--flow-muted)] focus-visible:ring-2 focus-visible:ring-[var(--flow-lime)]"
       />
+        <p id={titleHintId} className="mt-1.5 text-xs leading-5 text-[var(--flow-muted)]">กรอกแค่ชื่องานก็เพิ่มได้ รายละเอียดอื่นใส่ภายหลังได้</p>
+        {titleError && <p id={titleErrorId} role="alert" className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-[var(--flow-warning)]"><AlertCircle aria-hidden size={14} />{titleError}</p>}
+      </div>
 
-      <LocationDisclosure value={location} onChange={setLocation} onBusyChange={setLocationBusy} title="ที่ไหน" quickLocations={quickLocations} />
+      <button
+        type="button"
+        aria-expanded={detailsOpen}
+        aria-controls={detailsId}
+        onClick={() => setDetailsOpen((current) => !current)}
+        className="flow-press flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-[var(--flow-line)] px-3 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-[var(--flow-lime-dark)]"
+      >
+        <span className="flex items-center gap-2 font-semibold"><SlidersHorizontal aria-hidden size={16} />เพิ่มรายละเอียด</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-xs text-[var(--flow-muted)]">
+          <span className="truncate">{configuredDetailCount ? `ตั้งค่าแล้ว ${configuredDetailCount} รายการ` : "ไม่บังคับ"}</span>
+          <ChevronDown aria-hidden size={15} className={`shrink-0 transition-transform ${detailsOpen ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+
+      {detailsOpen && <div id={detailsId} className="flow-expand flex min-w-0 flex-col gap-2">
+      <LocationDisclosure value={location} onChange={setLocation} onBusyChange={setLocationBusy} title="สถานที่" quickLocations={quickLocations} />
 
       <CollapsibleRow icon={<Clock3 aria-hidden size={16} className="text-[var(--flow-muted)]" />} label="เมื่อไหร่" open={expanded === "time"} onToggle={() => toggle("time")} summary={`${timeSummary} · ${durationSummary}`}>
         <label className="flex min-h-11 items-center gap-2 text-sm">
@@ -208,11 +254,13 @@ export function TaskInput({
         <label className="text-xs">กำหนดแจ้งเตือนเอง (นาที)<input type="number" min={0} max={10080} value={customReminder} onChange={(event) => changeCustomReminder(event.target.value)} className="font-grotesk mt-1 h-11 w-full rounded-xl border border-[var(--flow-line)] bg-[var(--flow-paper)] px-3" /></label>
         <label className="text-xs font-semibold">โน้ต<textarea rows={3} value={draft.note} onChange={(event) => patchDraft(setDraft, { note: event.target.value })} className="mt-1 w-full resize-y rounded-xl border border-[var(--flow-line)] bg-[var(--flow-paper)] p-3" /></label>
       </CollapsibleRow>
+      </div>}
 
       {error && <p id={errorId} role="alert" className="flex items-start gap-2 rounded-xl border border-[var(--flow-warning)] p-3 text-sm font-semibold text-[var(--flow-warning)]"><AlertCircle aria-hidden size={17} className="mt-0.5 shrink-0" />{error}</p>}
+      <p role="status" aria-live="polite" className="sr-only">{submitting ? (editing ? "กำลังบันทึกงาน" : "กำลังเพิ่มงาน") : ""}</p>
       <div className="sticky bottom-0 z-10 -mx-1 mt-1 flex gap-2 bg-[var(--flow-paper)] px-1 pb-[max(.25rem,env(safe-area-inset-bottom))] pt-2">
         {editing && <button type="button" onClick={onCancel} className="flow-press min-h-12 rounded-xl border-[1.5px] border-[var(--flow-ink)] px-4 text-sm font-semibold">ยกเลิก</button>}
-        <button type="submit" disabled={!isTaskTitleValid(draft.title) || submitting || locationBusy} className="flow-press flow-inverse flex min-h-14 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">
+        <button type="submit" disabled={submitting || locationBusy} className="flow-press flow-inverse flex min-h-14 flex-1 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-35">
           {locationBusy ? "กำลังค้นหาตำแหน่ง…" : submitting ? "กำลังบันทึก…" : editing ? "บันทึกงาน" : <>เพิ่มงาน <Plus aria-hidden size={16} className="text-[var(--flow-lime)]" /></>}
         </button>
       </div>

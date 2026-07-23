@@ -69,7 +69,7 @@ export function FocusPanel({ tasks, sessions, active, onActiveChange, onComplete
 
   return (
     <section className="flow-card flow-rise overflow-hidden rounded-[22px]">
-      <div className="flow-inverse px-5 py-7 text-center">
+      <div data-tour="focus" className="flow-inverse px-5 py-7 text-center">
         <p className="text-sm opacity-70">โหมดโฟกัส</p>
         <p className="font-grotesk my-3 text-6xl font-bold tabular-nums tracking-[-0.05em]" aria-label={`เวลาเหลือ ${minutes} นาที ${seconds} วินาที`}>
           {display}
