@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { AlertCircle, ChevronDown, Clock3, FileText, Plus, SlidersHorizontal, Sparkles, Star } from "lucide-react";
 import { LocationDisclosure } from "@/components/location/LocationDisclosure";
 import {
@@ -16,7 +16,8 @@ import {
   type TaskFormDraft,
 } from "@/lib/task-form";
 import { taskLocationFromFlat, taskLocationToFlat, type TaskLocation } from "@/lib/location";
-import type { Category, Task } from "@/lib/types";
+import { bangkokPlaceHour, rankPlaceSuggestions, type PlaceSuggestion } from "@/lib/smart-places";
+import type { Category, RecentPlace, SavedPlace, Task } from "@/lib/types";
 
 const PRIORITIES = [
   ["urgent", "ด่วน"],
@@ -62,6 +63,14 @@ export function TaskInput({
   categories = [],
   date,
   quickLocations,
+  savedPlaces,
+  recentPlaces,
+  locationSuggestions,
+  locationRecommendationsEnabled,
+  onAddSavedPlace,
+  onEditSavedPlace,
+  onPromoteRecentPlace,
+  onClearRecentPlaces,
   onOpenBulk,
 }: {
   onAdd: (task: Task, repeat: RepeatDraft) => void | Promise<void>;
@@ -72,6 +81,14 @@ export function TaskInput({
   categories?: Category[];
   date?: string;
   quickLocations?: readonly TaskLocation[];
+  savedPlaces?: readonly SavedPlace[];
+  recentPlaces?: readonly RecentPlace[];
+  locationSuggestions?: readonly PlaceSuggestion[];
+  locationRecommendationsEnabled?: boolean;
+  onAddSavedPlace?: () => void;
+  onEditSavedPlace?: (place: SavedPlace) => void;
+  onPromoteRecentPlace?: (place: RecentPlace) => void;
+  onClearRecentPlaces?: () => void;
   onOpenBulk?: () => void;
 }) {
   const [draft, setDraft] = useState<TaskFormDraft>(() => taskToFormDraft(editing));
@@ -96,6 +113,16 @@ export function TaskInput({
   const errorId = `${formId}-error`;
   const duration = validateDuration(draft.durationSet, draft.durationHours, draft.durationMinutes);
   const startTime = validateStartTime(!draft.allDay && draft.timeSet, draft.time);
+  const contextualLocationSuggestions = useMemo(() => {
+    if (!savedPlaces && !recentPlaces) return locationSuggestions ?? [];
+    const explicitHour = draft.timeSet && /^\d{2}:\d{2}$/u.test(draft.time) ? Number(draft.time.slice(0, 2)) : undefined;
+    return rankPlaceSuggestions(
+      savedPlaces ?? [],
+      recentPlaces ?? [],
+      { date, hour: explicitHour ?? bangkokPlaceHour(), categoryId: draft.categoryId || undefined },
+      locationRecommendationsEnabled !== false,
+    );
+  }, [date, draft.categoryId, draft.time, draft.timeSet, locationRecommendationsEnabled, locationSuggestions, recentPlaces, savedPlaces]);
   const toggle = (row: Exclude<ExpandedRow, null>) => setExpanded((current) => current === row ? null : row);
 
   const toggleReminder = (value: number) => {
@@ -214,7 +241,7 @@ export function TaskInput({
       </button>
 
       {detailsOpen && <div id={detailsId} className="flow-expand flex min-w-0 flex-col gap-2">
-      <LocationDisclosure value={location} onChange={setLocation} onBusyChange={setLocationBusy} title="สถานที่" quickLocations={quickLocations} />
+      <LocationDisclosure value={location} onChange={setLocation} onBusyChange={setLocationBusy} title="สถานที่" quickLocations={quickLocations} savedPlaces={savedPlaces} recentPlaces={recentPlaces} suggestions={contextualLocationSuggestions} recommendationsEnabled={locationRecommendationsEnabled} onAddSavedPlace={onAddSavedPlace} onEditSavedPlace={onEditSavedPlace} onPromoteRecentPlace={onPromoteRecentPlace} onClearRecent={onClearRecentPlaces} />
 
       <CollapsibleRow icon={<Clock3 aria-hidden size={16} className="text-[var(--flow-muted)]" />} label="เมื่อไหร่" open={expanded === "time"} onToggle={() => toggle("time")} summary={`${timeSummary} · ${durationSummary}`}>
         <label className="flex min-h-11 items-center gap-2 text-sm">

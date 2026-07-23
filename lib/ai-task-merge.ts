@@ -128,6 +128,7 @@ export function mergeScheduleIntoTasks({
       locationCapturedAt: placeChanged ? undefined : base.locationCapturedAt,
       fixedTime: item.start,
       durationMin: scheduleDurationMin(item.start, item.end),
+      travelFromPrevMin: item.travelFromPrevMin,
       allDay: false,
       order,
       aiAdded: base.aiAdded || item.aiAdded || undefined,

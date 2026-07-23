@@ -209,9 +209,19 @@ describe("TaskInput", () => {
     expect(onAdd.mock.calls[0][0]).toMatchObject({ title: "เตรียมเอกสาร" });
   });
 
-  it("stores the บ้าน quick choice as a name without synthetic coordinates", async () => {
+  it("stores a saved บ้าน choice as a name without synthetic coordinates", async () => {
     const onAdd = successfulSubmitMock();
-    renderTaskInput({ onAdd });
+    renderTaskInput({
+      onAdd,
+      savedPlaces: [{
+        id: "home",
+        label: "บ้าน",
+        placeName: "บ้าน",
+        category: "home",
+        createdAt: "2026-07-23T00:00:00.000Z",
+        updatedAt: "2026-07-23T00:00:00.000Z",
+      }],
+    });
     setInputValue(titleInput(), "อ่านหนังสือ");
     await openDetails();
     await click(button("สถานที่"));
@@ -219,7 +229,7 @@ describe("TaskInput", () => {
     await click(button("เพิ่มงาน"));
 
     const task = onAdd.mock.calls[0][0];
-    expect(task).toMatchObject({ place: "บ้าน", locationSource: "quick" });
+    expect(task).toMatchObject({ place: "บ้าน", locationSource: "saved" });
     expect(task.lat).toBeUndefined();
     expect(task.lng).toBeUndefined();
   });

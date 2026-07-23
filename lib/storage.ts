@@ -5,8 +5,10 @@ import {
   DayMetaSchema,
   FlowStateSchema,
   FocusSessionSchema,
+  RecentPlaceSchema,
   RecurrenceRuleSchema,
   ReminderLogSchema,
+  SavedPlaceSchema,
   type FlowState,
   type StoredTask,
   TaskSchema,
@@ -34,6 +36,8 @@ export function createDefaultState(now = new Date()): FlowState {
     recurrenceRules: [],
     dayMetaByDay: {},
     focusSessions: [],
+    savedPlaces: [],
+    recentPlaces: [],
     settings: AppSettingsSchema.parse({}),
     reminderLog: [],
     selectedDate: localDateKey(now),
@@ -71,7 +75,8 @@ function safeLegacyCoordinates(value: JsonRecord): { lat?: number; lng?: number 
 }
 
 function safeLegacyLocationSource(value: unknown) {
-  return value === "search" || value === "quick" || value === "map" || value === "live" || value === "manual" ? value : undefined;
+  return value === "search" || value === "quick" || value === "map" || value === "live" || value === "manual"
+    || value === "saved" || value === "suggested" || value === "recent" ? value : undefined;
 }
 
 function hasLegacyTaskTimes(value: unknown): boolean {
@@ -171,11 +176,18 @@ export function migrateState(value: unknown, now = new Date()): FlowState {
   const focusSessions = Array.isArray(value.focusSessions)
     ? value.focusSessions.map((item) => FocusSessionSchema.safeParse(item)).filter((result) => result.success).map((result) => result.data)
     : base.focusSessions;
+  const savedPlaces = Array.isArray(value.savedPlaces)
+    ? value.savedPlaces.map((item) => SavedPlaceSchema.safeParse(item)).filter((result) => result.success).map((result) => result.data)
+    : base.savedPlaces;
+  const recentPlaces = Array.isArray(value.recentPlaces)
+    ? value.recentPlaces.map((item) => RecentPlaceSchema.safeParse(item)).filter((result) => result.success).map((result) => result.data)
+    : base.recentPlaces;
   const activeFocusSession = ActiveFocusSessionSchema.safeParse(value.activeFocusSession);
   const reminderLog = Array.isArray(value.reminderLog)
     ? value.reminderLog.map((item) => ReminderLogSchema.safeParse(item)).filter((result) => result.success).map((result) => result.data)
     : base.reminderLog;
   return FlowStateSchema.parse({
+    ...value,
     ...base,
     tasksByDay,
     categories: categories.length ? categories : base.categories,
@@ -183,6 +195,8 @@ export function migrateState(value: unknown, now = new Date()): FlowState {
     dayMetaByDay,
     focusSessions,
     activeFocusSession: activeFocusSession.success ? activeFocusSession.data : undefined,
+    savedPlaces,
+    recentPlaces,
     settings: settings.success ? settings.data : base.settings,
     reminderLog,
     selectedDate: typeof value.selectedDate === "string" && parseDateKey(value.selectedDate) ? value.selectedDate : base.selectedDate,
@@ -236,7 +250,21 @@ export function importState(raw: string, current: FlowState, mode: "merge" | "re
   }
   const categories = new Map(current.categories.map((category) => [category.id, category]));
   incoming.categories.forEach((category) => categories.set(category.id, category));
-  return FlowStateSchema.parse({ ...current, tasksByDay, categories: [...categories.values()], updatedAt: new Date().toISOString() });
+  const savedPlaces = new Map(current.savedPlaces.map((place) => [place.id, place]));
+  incoming.savedPlaces.forEach((place) => savedPlaces.set(place.id, place));
+  const recentPlaces = new Map(current.recentPlaces.map((place) => [place.placeKey, place]));
+  incoming.recentPlaces.forEach((place) => {
+    const existing = recentPlaces.get(place.placeKey);
+    if (!existing || Date.parse(place.lastUsedAt) >= Date.parse(existing.lastUsedAt)) recentPlaces.set(place.placeKey, place);
+  });
+  return FlowStateSchema.parse({
+    ...current,
+    tasksByDay,
+    categories: [...categories.values()],
+    savedPlaces: [...savedPlaces.values()],
+    recentPlaces: [...recentPlaces.values()].sort((left, right) => Date.parse(right.lastUsedAt) - Date.parse(left.lastUsedAt)).slice(0, 5),
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function clearState(storage: StorageLike): void {

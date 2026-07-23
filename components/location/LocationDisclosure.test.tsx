@@ -71,7 +71,7 @@ afterEach(() => {
 describe("LocationDisclosure accessibility", () => {
   it("treats quick locations as a group, announces success, and restores focus", async () => {
     const onChange = renderDisclosure();
-    const group = container?.querySelector('[role="group"][aria-label="สถานที่แนะนำ"]');
+    const group = container?.querySelector('[role="group"][aria-label="สถานที่ด่วน"]');
     const quickButton = [...(group?.querySelectorAll("button") ?? [])].find((button) => button.textContent?.includes("บ้าน")) as HTMLButtonElement | undefined;
     expect(quickButton).toBeTruthy();
 
@@ -83,6 +83,44 @@ describe("LocationDisclosure accessibility", () => {
     expect(onChange).toHaveBeenCalledWith({ name: "บ้าน", source: "quick" });
     expect(container?.querySelector('[role="status"][aria-live="polite"]')?.textContent).toContain("เลือกสถานที่ บ้าน แล้ว");
     expect(document.activeElement).toBe(container?.querySelector('input[placeholder="ค้นหาสถานที่"]'));
+  });
+
+  it("shows saved, suggested and recent sections without requesting geolocation", () => {
+    const stamp = "2026-07-23T08:00:00.000Z";
+    act(() => {
+      root?.render(<LocationDisclosure
+        value={null}
+        onChange={vi.fn()}
+        defaultExpanded
+        savedPlaces={[{ id: "home", label: "บ้าน", placeName: "คอนโด", category: "home", createdAt: stamp, updatedAt: stamp }]}
+        recentPlaces={[{ placeKey: "library||", placeName: "หอสมุด", lastUsedAt: stamp, useCount: 2 }]}
+        suggestions={[{ key: "home", location: { name: "บ้าน", source: "suggested" }, reason: "ใช้ล่าสุดเมื่อวาน", score: 100 }]}
+      />);
+    });
+    expect(container?.textContent).toContain("สถานที่ประจำ");
+    expect(container?.textContent).toContain("แนะนำสำหรับคุณ");
+    expect(container?.textContent).toContain("ล่าสุด");
+    expect(container?.textContent).toContain("คอนโด");
+    expect(liveMock.request).not.toHaveBeenCalled();
+  });
+
+  it("offers a frequent recent place once and promotes it only after confirmation", () => {
+    const stamp = "2026-07-23T08:00:00.000Z";
+    const frequent = { placeKey: "library||", placeName: "หอสมุด", lastUsedAt: stamp, useCount: 3 };
+    const onPromoteRecentPlace = vi.fn();
+    act(() => {
+      root?.render(<LocationDisclosure
+        value={null}
+        onChange={vi.fn()}
+        defaultExpanded
+        recentPlaces={[frequent]}
+        onPromoteRecentPlace={onPromoteRecentPlace}
+      />);
+    });
+    expect(container?.textContent).toContain("ต้องการบันทึกเป็นสถานที่ประจำไหม");
+    const promote = [...(container?.querySelectorAll("button") ?? [])].find((item) => item.textContent?.includes("บันทึกเป็นสถานที่ประจำ")) as HTMLButtonElement | undefined;
+    act(() => promote?.click());
+    expect(onPromoteRecentPlace).toHaveBeenCalledWith(frequent);
   });
 
   it("restores focus after choosing a search result", async () => {

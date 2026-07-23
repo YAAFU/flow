@@ -262,7 +262,7 @@ describe("AIPlannerDialog", () => {
   it("lets a parsed draft choose a structured location for route planning", async () => {
     const onGeneratePlan = vi.fn(async () => plan);
     act(() => {
-      root?.render(<AIPlannerDialog selectedDate="2026-07-21" currentTasks={[]} onClose={vi.fn()} onParse={vi.fn(async () => parsed)} onGeneratePlan={onGeneratePlan} onAppendDrafts={vi.fn()} onApplyPlan={vi.fn()} />);
+      root?.render(<AIPlannerDialog selectedDate="2026-07-21" currentTasks={[]} savedPlaces={[{ id: "siam", label: "สยาม", placeName: "สยาม", latitude: 13.746, longitude: 100.534, category: "custom", createdAt: "2026-07-21T00:00:00.000Z", updatedAt: "2026-07-21T00:00:00.000Z" }]} onClose={vi.fn()} onParse={vi.fn(async () => parsed)} onGeneratePlan={onGeneratePlan} onAppendDrafts={vi.fn()} onApplyPlan={vi.fn()} />);
     });
     const request = container?.querySelector<HTMLTextAreaElement>("#planner-request");
     setControlValue(request!, "เขียนรายงาน 90 นาที");
@@ -280,7 +280,7 @@ describe("AIPlannerDialog", () => {
         place: "สยาม",
         lat: expect.any(Number),
         lng: expect.any(Number),
-        locationSource: "quick",
+        locationSource: "saved",
       })],
     }));
   });

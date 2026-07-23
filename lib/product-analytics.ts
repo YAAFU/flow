@@ -28,6 +28,20 @@ export const PRODUCT_EVENT_NAMES = [
   "bulk_text_tasks_confirmed",
   "bulk_text_tasks_created",
   "bulk_text_planner_used",
+  "saved_place_created",
+  "saved_place_updated",
+  "saved_place_deleted",
+  "location_selected",
+  "location_suggestion_used",
+  "recent_locations_cleared",
+  "focus_opened",
+  "focus_started",
+  "focus_paused",
+  "focus_completed",
+  "focus_task_completed",
+  "focus_continued",
+  "focus_reschedule_requested",
+  "focus_plan_applied",
 ] as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
@@ -79,6 +93,14 @@ export type ProductEventMetadata = {
   hasFixedTimes?: boolean;
   requiredPlanner?: boolean;
   success?: boolean;
+  source?: "saved" | "suggested" | "recent" | "search" | "map" | "live" | "manual";
+  category?: "home" | "school" | "university" | "work" | "fitness" | "custom";
+  hasCoordinates?: boolean;
+  sessionMode?: "free" | "pomodoro" | "custom" | "long" | "remaining_task_time";
+  plannedDurationMin?: number;
+  actualDurationMin?: number;
+  hasNextLockedTask?: boolean;
+  outcome?: "completed" | "continued" | "rescheduled" | "paused" | "abandoned";
 };
 
 export type SanitizedProductEventMetadata = Readonly<ProductEventMetadata>;
@@ -124,6 +146,20 @@ const EVENT_METADATA_KEYS: Record<ProductEventName, readonly MetadataKey[]> = {
   bulk_text_tasks_confirmed: ["itemCount", "parserMode", "requiredPlanner", "success"],
   bulk_text_tasks_created: ["itemCount", "parserMode", "requiredPlanner", "success"],
   bulk_text_planner_used: ["itemCount", "parserMode", "success"],
+  saved_place_created: ["category", "hasCoordinates"],
+  saved_place_updated: ["category", "hasCoordinates"],
+  saved_place_deleted: ["category", "hasCoordinates"],
+  location_selected: ["source", "hasCoordinates"],
+  location_suggestion_used: ["source", "hasCoordinates"],
+  recent_locations_cleared: [],
+  focus_opened: ["hasNextLockedTask"],
+  focus_started: ["sessionMode", "plannedDurationMin", "hasNextLockedTask"],
+  focus_paused: ["sessionMode", "actualDurationMin"],
+  focus_completed: ["sessionMode", "plannedDurationMin", "actualDurationMin", "hasNextLockedTask", "outcome"],
+  focus_task_completed: ["actualDurationMin"],
+  focus_continued: ["plannedDurationMin", "hasNextLockedTask"],
+  focus_reschedule_requested: ["plannedDurationMin", "hasNextLockedTask"],
+  focus_plan_applied: ["plannerMode"],
 };
 
 const ENTRY_POINTS = new Set<string>(ANALYTICS_ENTRY_POINTS);
@@ -131,6 +167,10 @@ const TEMPLATE_TYPES = new Set<string>(ANALYTICS_TEMPLATE_TYPES);
 const PLANNER_MODES = new Set<string>(ANALYTICS_PLANNER_MODES);
 const COMPLETION_STATUSES = new Set<string>(ANALYTICS_COMPLETION_STATUSES);
 const DURATION_BUCKETS = new Set<string>(ANALYTICS_DURATION_BUCKETS);
+const LOCATION_SOURCES = new Set(["saved", "suggested", "recent", "search", "map", "live", "manual"]);
+const PLACE_CATEGORIES = new Set(["home", "school", "university", "work", "fitness", "custom"]);
+const FOCUS_MODES = new Set(["free", "pomodoro", "custom", "long", "remaining_task_time"]);
+const FOCUS_OUTCOMES = new Set(["completed", "continued", "rescheduled", "paused", "abandoned"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -173,7 +213,20 @@ function sanitizeValue(key: MetadataKey, value: unknown): ProductEventMetadata[M
     case "hasFixedTimes":
     case "requiredPlanner":
     case "success":
+    case "hasCoordinates":
+    case "hasNextLockedTask":
       return typeof value === "boolean" ? value : undefined;
+    case "source":
+      return typeof value === "string" && LOCATION_SOURCES.has(value) ? value as ProductEventMetadata["source"] : undefined;
+    case "category":
+      return typeof value === "string" && PLACE_CATEGORIES.has(value) ? value as ProductEventMetadata["category"] : undefined;
+    case "sessionMode":
+      return typeof value === "string" && FOCUS_MODES.has(value) ? value as ProductEventMetadata["sessionMode"] : undefined;
+    case "outcome":
+      return typeof value === "string" && FOCUS_OUTCOMES.has(value) ? value as ProductEventMetadata["outcome"] : undefined;
+    case "plannedDurationMin":
+    case "actualDurationMin":
+      return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1440 ? Math.round(value) : undefined;
   }
 }
 

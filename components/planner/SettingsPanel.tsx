@@ -5,6 +5,8 @@ import { BookOpen, CalendarPlus, GitCompareArrows, Map, RotateCcw, Sparkles, Tra
 import type { AppSettings, FlowState } from "@/lib/types";
 import { exportState, importState } from "@/lib/storage";
 import { toCsv, toIcs } from "@/lib/calendar-export";
+import { SavedPlacesManager } from "@/components/location/SavedPlacesManager";
+import type { SavedPlace } from "@/lib/types";
 
 function download(name:string,content:string,type:string){const url=URL.createObjectURL(new Blob([content],{type}));const anchor=document.createElement("a");anchor.href=url;anchor.download=name;anchor.click();URL.revokeObjectURL(url);}
 
@@ -14,6 +16,9 @@ export type SettingsPanelProps = {
   onSettings: (settings: AppSettings) => void;
   onAddCategory: (name: string) => void;
   onDeleteCategory: (id: string) => void;
+  onSavePlace?: (place: SavedPlace) => void;
+  onDeletePlace?: (id: string) => void;
+  onClearRecentPlaces?: () => void;
   onStartCoreTour?: () => void;
   onStartFullTour?: () => void;
   onTrySampleDay?: () => void;
@@ -43,6 +48,9 @@ export function SettingsPanel({
   onSettings,
   onAddCategory,
   onDeleteCategory,
+  onSavePlace = () => undefined,
+  onDeletePlace = () => undefined,
+  onClearRecentPlaces = () => undefined,
   onStartCoreTour,
   onStartFullTour,
   onTrySampleDay,
@@ -64,6 +72,8 @@ export function SettingsPanel({
 
   return <div className="flow-form flow-stagger space-y-5">
     <section className="flow-card rounded-2xl p-4"><h2 className="font-bold">หน้าตาและเวลา</h2><label className="mt-3 block text-sm">ธีม<select value={state.settings.theme} onChange={e=>onSettings({...state.settings,theme:e.target.value as AppSettings["theme"]})} className="mt-1 h-12 w-full rounded-xl border border-[var(--flow-line)] bg-[var(--flow-paper)] px-3"><option value="system">ตามระบบ</option><option value="light">สว่าง</option><option value="dark">มืด</option></select></label><div className="mt-3 grid grid-cols-2 gap-2 [&>*]:min-w-0"><label className="text-sm">เริ่มไทม์ไลน์<input type="number" min="0" max={state.settings.timelineEndHour-1} value={state.settings.timelineStartHour} onChange={e=>onSettings({...state.settings,timelineStartHour:Math.min(Number(e.target.value),state.settings.timelineEndHour-1)})} className="font-grotesk mt-1 h-12 w-full rounded-xl border px-3"/></label><label className="text-sm">จบไทม์ไลน์<input type="number" min={state.settings.timelineStartHour+1} max="24" value={state.settings.timelineEndHour} onChange={e=>onSettings({...state.settings,timelineEndHour:Math.max(Number(e.target.value),state.settings.timelineStartHour+1)})} className="font-grotesk mt-1 h-12 w-full rounded-xl border px-3"/></label></div></section>
+    <section className="flow-card rounded-2xl p-4"><h2 className="font-bold">ค่าเริ่มต้น Focus</h2><p className="mt-1 text-xs leading-5 text-[var(--flow-muted)]">ระบบจะจำรูปแบบล่าสุดก่อน แล้วใช้ค่านี้เมื่อยังไม่มีประวัติ</p><label className="mt-3 block text-sm">รูปแบบ<select value={state.settings.defaultFocusMode} onChange={e=>onSettings({...state.settings,defaultFocusMode:e.target.value as AppSettings["defaultFocusMode"]})} className="mt-1 h-12 w-full rounded-xl border border-[var(--flow-line)] bg-[var(--flow-paper)] px-3"><option value="pomodoro">Pomodoro 25 นาที</option><option value="long">Focus 50 นาที</option><option value="remaining_task_time">ตามเวลาที่เหลือของงาน</option><option value="custom">กำหนดเอง</option></select></label><label className="mt-3 block text-sm">เวลาสำรองก่อนงานล็อก (นาที)<input type="number" min={0} max={60} value={state.settings.focusBreakBufferMin} onChange={e=>onSettings({...state.settings,focusBreakBufferMin:Math.max(0,Math.min(60,Number(e.target.value)))})} className="font-grotesk mt-1 h-12 w-full rounded-xl border border-[var(--flow-line)] bg-[var(--flow-paper)] px-3"/></label></section>
+    <SavedPlacesManager savedPlaces={state.savedPlaces} recentPlaces={state.recentPlaces} settings={state.settings} onSave={onSavePlace} onDelete={onDeletePlace} onClearRecent={onClearRecentPlaces} onSettings={onSettings}/>
     <section className="flow-card rounded-2xl p-4"><h2 className="font-bold">หมวดหมู่</h2><div className="mt-3 flex gap-2"><input value={category} onChange={e=>setCategory(e.target.value)} placeholder="ชื่อหมวดหมู่" aria-label="ชื่อหมวดหมู่ใหม่" className="h-12 min-w-0 flex-1 rounded-xl border border-[var(--flow-line)] bg-transparent px-3"/><button type="button" className="flow-press flow-inverse h-12 rounded-xl px-4 font-semibold" onClick={()=>{if(category.trim()){onAddCategory(category.trim());setCategory("");}}}>เพิ่ม</button></div><ul className="mt-2">{state.categories.map(c=><li key={c.id} className="flex min-h-11 items-center justify-between border-b flow-hairline"><span>{c.name}</span><button type="button" aria-label={`ลบหมวด ${c.name}`} className="flow-press grid h-11 w-11 place-items-center rounded-xl" onClick={()=>onDeleteCategory(c.id)}><Trash2 size={16}/></button></li>)}</ul></section>
     <section className="flow-card scroll-mt-4 rounded-2xl p-4" aria-labelledby="flow-help-heading">
       <p className="font-grotesk text-[10px] font-bold tracking-[0.14em] text-[var(--flow-lime-dark)]">HELP &amp; ONBOARDING</p>

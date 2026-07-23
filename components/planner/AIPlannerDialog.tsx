@@ -26,13 +26,13 @@ import { controlBreakdown, freeTimeMin } from "@/lib/score";
 import { findScheduleOverlaps, scheduleDurationMin } from "@/lib/schedule-validation";
 import { timeToMinutes } from "@/lib/time";
 import {
-  DEFAULT_QUICK_LOCATIONS,
   hasCoordinates,
   taskLocationFromFlat,
   taskLocationToFlat,
   type TaskLocation,
 } from "@/lib/location";
-import type { AiMode, DayEnergy, PlanResult, PlanVariant, ScheduleItem, Task } from "@/lib/types";
+import type { PlaceSuggestion } from "@/lib/smart-places";
+import type { AiMode, DayEnergy, PlanResult, PlanVariant, RecentPlace, SavedPlace, ScheduleItem, Task } from "@/lib/types";
 import { trackProductEvent } from "@/lib/product-analytics";
 
 export type PlannerDraftTask = ParsedTaskDraft & { draftId: string };
@@ -75,6 +75,14 @@ export type AIPlannerDialogProps = {
   getEnergyForDate?: (date: string) => DayEnergy;
   onEnergyChange?: (date: string, energy: DayEnergy) => void;
   quickLocations?: readonly TaskLocation[];
+  savedPlaces?: readonly SavedPlace[];
+  recentPlaces?: readonly RecentPlace[];
+  locationSuggestions?: readonly PlaceSuggestion[];
+  locationRecommendationsEnabled?: boolean;
+  onAddSavedPlace?: () => void;
+  onEditSavedPlace?: (place: SavedPlace) => void;
+  onPromoteRecentPlace?: (place: RecentPlace) => void;
+  onClearRecentPlaces?: () => void;
   preferredMode?: AiMode;
   onClose: () => void;
   onParse: (input: PlannerParseInput) => Promise<ParsedTasksResponse>;
@@ -206,7 +214,15 @@ export function AIPlannerDialog({
   onTargetDateChange,
   getEnergyForDate,
   onEnergyChange,
-  quickLocations = DEFAULT_QUICK_LOCATIONS,
+  quickLocations = [],
+  savedPlaces = [],
+  recentPlaces = [],
+  locationSuggestions = [],
+  locationRecommendationsEnabled = true,
+  onAddSavedPlace,
+  onEditSavedPlace,
+  onPromoteRecentPlace,
+  onClearRecentPlaces,
   preferredMode = "local",
   onClose,
   onParse,
@@ -518,6 +534,14 @@ export function AIPlannerDialog({
               description="ใช้เป็นต้นทางของงานแรกและช่วยลดการเดินทางย้อนกลับ ตำแหน่งนี้อยู่เฉพาะใน Planner และจะไม่ติดตามเบื้องหลัง"
               value={startLocation}
               quickLocations={plannerStartLocations}
+              savedPlaces={savedPlaces}
+              recentPlaces={recentPlaces}
+              suggestions={locationSuggestions}
+              recommendationsEnabled={locationRecommendationsEnabled}
+              onAddSavedPlace={onAddSavedPlace}
+              onEditSavedPlace={onEditSavedPlace}
+              onPromoteRecentPlace={onPromoteRecentPlace}
+              onClearRecent={onClearRecentPlaces}
               disabled={disabled}
               defaultExpanded
               onBusyChange={(isBusy) => setLocationBusy("planner-origin", isBusy)}
@@ -622,6 +646,14 @@ export function AIPlannerDialog({
                         description="ค้นหา เลือกหมุด หรือใช้ตำแหน่งปัจจุบัน เพื่อให้เส้นทางของงานฉบับร่างนี้มีพิกัดจริง"
                         value={taskLocationFromFlat(draft)}
                         quickLocations={quickLocations}
+                        savedPlaces={savedPlaces}
+                        recentPlaces={recentPlaces}
+                        suggestions={locationSuggestions}
+                        recommendationsEnabled={locationRecommendationsEnabled}
+                        onAddSavedPlace={onAddSavedPlace}
+                        onEditSavedPlace={onEditSavedPlace}
+                        onPromoteRecentPlace={onPromoteRecentPlace}
+                        onClearRecent={onClearRecentPlaces}
                         disabled={disabled}
                         onBusyChange={(isBusy) => setLocationBusy(`draft-${draft.draftId}`, isBusy)}
                         onChange={(location) => updateDraft(draft.draftId, taskLocationToFlat(location))}

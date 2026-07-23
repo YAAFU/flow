@@ -164,10 +164,17 @@ export function buildTaskFromFormDraft(
   if (!validated.success) throw new Error(validated.error);
   const now = options.now ?? new Date();
   const fields: NewTaskInput = { ...options.additionalFields, ...validated.value.fields };
+  const routeOriginChanged = options.editing
+    ? fields.fixedTime !== options.editing.fixedTime
+      || fields.place !== options.editing.place
+      || fields.lat !== options.editing.lat
+      || fields.lng !== options.editing.lng
+    : false;
   const task = options.editing
     ? TaskSchema.parse({
       ...options.editing,
       ...fields,
+      travelFromPrevMin: routeOriginChanged ? undefined : options.editing.travelFromPrevMin,
       id: options.editing.id,
       createdAt: options.editing.createdAt ?? now.toISOString(),
       updatedAt: now.toISOString(),

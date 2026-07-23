@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AlertCircle, Check, ChevronDown, Loader2, MapPin, Search, X } from "lucide-react";
+import { AlertCircle, BriefcaseBusiness, Check, ChevronDown, Clock3, Dumbbell, GraduationCap, Home, Loader2, MapPin, Pencil, Plus, Search, Sparkles, Star, Trash2, X } from "lucide-react";
 import { LocationPicker } from "@/components/LocationPicker";
 import { useCurrentLocation, type CurrentLocationStatus } from "@/hooks/useCurrentLocation";
 import {
   CoordinatesSchema,
-  DEFAULT_QUICK_LOCATIONS,
   currentLocationToTaskLocation,
   hasCoordinates,
   type TaskLocation,
 } from "@/lib/location";
+import { recentPlaceToLocation, savedPlaceToLocation, type PlaceSuggestion } from "@/lib/smart-places";
+import type { RecentPlace, SavedPlace } from "@/lib/types";
 
 type SearchState = "idle" | "loading" | "success" | "empty" | "error";
 
@@ -22,8 +23,25 @@ export type LocationDisclosureProps = {
   defaultExpanded?: boolean;
   disabled?: boolean;
   quickLocations?: readonly TaskLocation[];
+  savedPlaces?: readonly SavedPlace[];
+  recentPlaces?: readonly RecentPlace[];
+  suggestions?: readonly PlaceSuggestion[];
+  recommendationsEnabled?: boolean;
+  onAddSavedPlace?: () => void;
+  onEditSavedPlace?: (place: SavedPlace) => void;
+  onPromoteRecentPlace?: (place: RecentPlace) => void;
+  onClearRecent?: () => void;
   onBusyChange?: (busy: boolean) => void;
 };
+
+function SavedPlaceIcon({ place }: { place: SavedPlace }) {
+  const props = { size: 15, "aria-hidden": true as const };
+  if (place.category === "home") return <Home {...props} />;
+  if (place.category === "school" || place.category === "university") return <GraduationCap {...props} />;
+  if (place.category === "work") return <BriefcaseBusiness {...props} />;
+  if (place.category === "fitness") return <Dumbbell {...props} />;
+  return <Star {...props} />;
+}
 
 function liveStatusMessage(status: CurrentLocationStatus, accuracy?: number, reverseGeocodeFailed = false): string {
   switch (status) {
@@ -69,7 +87,15 @@ export function LocationDisclosure({
   description = "ใช้ตำแหน่งเพื่อช่วยคำนวณการเดินทางและจัดลำดับงาน โดยจะขอสิทธิ์เมื่อคุณกดใช้ตำแหน่งปัจจุบันเท่านั้น",
   defaultExpanded = false,
   disabled = false,
-  quickLocations = DEFAULT_QUICK_LOCATIONS,
+  quickLocations = [],
+  savedPlaces = [],
+  recentPlaces = [],
+  suggestions = [],
+  recommendationsEnabled = true,
+  onAddSavedPlace,
+  onEditSavedPlace,
+  onPromoteRecentPlace,
+  onClearRecent,
   onBusyChange,
 }: LocationDisclosureProps) {
   const disclosureId = useId();
@@ -181,6 +207,14 @@ export function LocationDisclosure({
   };
 
   const statusMessage = liveStatusMessage(live.status, live.location?.accuracy, live.reverseGeocodeFailed);
+  const showPersonalSections = query.trim().length < 2;
+  const frequentSaveCandidate = onPromoteRecentPlace
+    ? recentPlaces.find((recent) => recent.useCount >= 3 && !savedPlaces.some((saved) => {
+      const recentName = recent.placeName.trim().toLocaleLowerCase("th-TH");
+      return saved.label.trim().toLocaleLowerCase("th-TH") === recentName
+        || saved.placeName.trim().toLocaleLowerCase("th-TH") === recentName;
+    }))
+    : undefined;
 
   return (
     <div className="rounded-xl bg-[var(--flow-surface)]">
@@ -249,7 +283,56 @@ export function LocationDisclosure({
             </div>
           )}
 
-          <div role="group" className="flex flex-wrap gap-1.5" aria-label="สถานที่แนะนำ">
+          {showPersonalSections && savedPlaces.length > 0 && <section aria-labelledby={`${disclosureId}-saved`}>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <h3 id={`${disclosureId}-saved`} className="flex items-center gap-1.5 text-xs font-semibold"><Star aria-hidden size={14} />สถานที่ประจำ</h3>
+              {onAddSavedPlace && <button type="button" onClick={onAddSavedPlace} className="min-h-9 px-2 text-xs font-semibold underline decoration-[var(--flow-lime-dark)] decoration-2 underline-offset-4"><Plus aria-hidden size={12} className="mr-1 inline" />เพิ่ม</button>}
+            </div>
+            <div className="space-y-1">
+              {savedPlaces.map((place) => {
+                const location = savedPlaceToLocation(place);
+                const selected = isSameLocation(value, location);
+                return <div key={place.id} className={`flex min-h-12 items-center rounded-xl border ${selected ? "border-[var(--flow-ink)] bg-[var(--flow-surface)]" : "border-[var(--flow-line)]"}`}>
+                  <button type="button" aria-pressed={selected} disabled={disabled} onClick={() => select(location)} className="flex min-w-0 flex-1 items-center gap-2 self-stretch px-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--flow-lime-dark)] disabled:opacity-50">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--flow-surface)]"><SavedPlaceIcon place={place} /></span>
+                    <span className="min-w-0"><span className="block truncate text-xs font-semibold">{place.label}</span>{place.placeName !== place.label && <span className="block truncate text-[11px] text-[var(--flow-muted)]">{place.placeName}</span>}</span>
+                    {selected && <Check aria-hidden size={14} className="ml-auto shrink-0" />}
+                  </button>
+                  {onEditSavedPlace && <button type="button" aria-label={`แก้ไขสถานที่ประจำ ${place.label}`} onClick={() => onEditSavedPlace(place)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"><Pencil aria-hidden size={14} /></button>}
+                </div>;
+              })}
+            </div>
+          </section>}
+
+          {showPersonalSections && savedPlaces.length === 0 && onAddSavedPlace && <button type="button" onClick={onAddSavedPlace} className="flow-press flex min-h-11 items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--flow-line)] text-xs font-semibold"><Plus aria-hidden size={14} />เพิ่มสถานที่ประจำ</button>}
+          {showPersonalSections && savedPlaces.length === 0 && !onAddSavedPlace && <p className="rounded-xl border border-dashed border-[var(--flow-line)] px-3 py-2 text-xs text-[var(--flow-muted)]">เพิ่มสถานที่ประจำได้จากเมนู ตั้งค่า → สถานที่และการเดินทาง</p>}
+
+          {showPersonalSections && recommendationsEnabled && suggestions.length > 0 && <section aria-labelledby={`${disclosureId}-suggested`}>
+            <h3 id={`${disclosureId}-suggested`} className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold"><Sparkles aria-hidden size={14} />แนะนำสำหรับคุณ</h3>
+            <div className="space-y-1">
+              {suggestions.map((suggestion) => <button type="button" key={suggestion.key} onClick={() => select(suggestion.location)} className="flex min-h-11 w-full items-center gap-2 rounded-xl border border-[var(--flow-line)] px-3 py-2 text-left">
+                <Sparkles aria-hidden size={14} className="shrink-0 text-[var(--flow-lime-dark)]" />
+                <span className="min-w-0"><span className="block truncate text-xs font-semibold">{suggestion.location.name}</span><span className="block truncate text-[11px] text-[var(--flow-muted)]">{suggestion.reason}</span></span>
+              </button>)}
+            </div>
+          </section>}
+
+          {showPersonalSections && recentPlaces.length > 0 && <section aria-labelledby={`${disclosureId}-recent`}>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <h3 id={`${disclosureId}-recent`} className="flex items-center gap-1.5 text-xs font-semibold"><Clock3 aria-hidden size={14} />ล่าสุด</h3>
+              {onClearRecent && <button type="button" onClick={onClearRecent} className="min-h-9 px-2 text-xs text-[var(--flow-muted)]"><Trash2 aria-hidden size={12} className="mr-1 inline" />ล้าง</button>}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {recentPlaces.slice(0, 5).map((place) => <button type="button" key={place.placeKey} onClick={() => select(recentPlaceToLocation(place))} className="flex min-h-9 max-w-full items-center gap-1 rounded-full border border-[var(--flow-line)] px-3 text-xs"><Clock3 aria-hidden size={12} /><span className="truncate">{place.placeName}</span></button>)}
+            </div>
+          </section>}
+
+          {showPersonalSections && frequentSaveCandidate && <aside className="rounded-xl border border-[var(--flow-line)] bg-[var(--flow-surface)] p-3">
+            <p className="text-xs font-semibold">คุณใช้ {frequentSaveCandidate.placeName} บ่อย ต้องการบันทึกเป็นสถานที่ประจำไหม?</p>
+            <button type="button" onClick={() => onPromoteRecentPlace?.(frequentSaveCandidate)} className="mt-2 min-h-10 rounded-xl border border-[var(--flow-line)] px-3 text-xs font-semibold"><Star aria-hidden size={13} className="mr-1 inline" />บันทึกเป็นสถานที่ประจำ</button>
+          </aside>}
+
+          {showPersonalSections && quickLocations.length > 0 && <div role="group" className="flex flex-wrap gap-1.5" aria-label="สถานที่ด่วน">
             {quickLocations.map((location) => {
               const selected = isSameLocation(value, location);
               return (
@@ -265,14 +348,14 @@ export function LocationDisclosure({
                 </button>
               );
             })}
-          </div>
+          </div>}
 
           <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={disabled} onClick={() => setPickerOpen(true)} className="flow-press min-h-10 rounded-full border-[1.5px] border-[var(--flow-ink)] px-3 text-xs font-semibold disabled:opacity-50"><MapPin aria-hidden size={13} className="mr-1 inline" />ปักหมุดบนแผนที่</button>
             <button type="button" disabled={disabled || live.isLoading} onClick={() => { onBusyChangeRef.current?.(true); live.request(); }} className="flow-press min-h-10 rounded-full border-[1.5px] border-[var(--flow-ink)] px-3 text-xs font-semibold disabled:opacity-50">
               {live.isLoading ? <Loader2 aria-hidden size={13} className="mr-1 inline animate-spin" /> : <MapPin aria-hidden size={13} className="mr-1 inline" />}
               {live.isLoading ? "กำลังค้นหาตำแหน่ง" : "ใช้ตำแหน่งปัจจุบัน"}
             </button>
+            <button type="button" disabled={disabled} onClick={() => setPickerOpen(true)} className="flow-press min-h-10 rounded-full border-[1.5px] border-[var(--flow-ink)] px-3 text-xs font-semibold disabled:opacity-50"><MapPin aria-hidden size={13} className="mr-1 inline" />ปักหมุดบนแผนที่</button>
             {value && <button type="button" aria-label="ล้างสถานที่" disabled={disabled} onClick={clear} className="flow-press min-h-10 rounded-full border border-[var(--flow-line)] px-3 text-xs disabled:opacity-50"><X aria-hidden size={13} className="mr-1 inline" />ไม่ระบุตำแหน่ง</button>}
           </div>
 

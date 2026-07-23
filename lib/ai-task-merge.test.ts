@@ -76,9 +76,9 @@ describe("AI plan task merge", () => {
     };
     const created = mergeScheduleIntoTasks({
       existing: [], drafts: [locatedDraft], categories: [], now: "2026-07-21T12:00:00.000Z", createId: () => "generated",
-      schedule: [{ taskId: plannerDraftTaskId("new"), title: "งานใหม่", placeLabel: "สยาม", start: "09:00", end: "09:30", travelFromPrevMin: 0 }],
+      schedule: [{ taskId: plannerDraftTaskId("new"), title: "งานใหม่", placeLabel: "สยาม", start: "09:00", end: "09:30", travelFromPrevMin: 12 }],
     });
-    expect(created.tasks[0]).toMatchObject({ place: "สยาม", lat: 13.746, lng: 100.534, locationSource: "search" });
+    expect(created.tasks[0]).toMatchObject({ place: "สยาม", lat: 13.746, lng: 100.534, locationSource: "search", travelFromPrevMin: 12 });
 
     const moved = mergeScheduleIntoTasks({
       existing: [created.tasks[0]], drafts: [], categories: [], now: "2026-07-21T13:00:00.000Z", createId: () => "generated",

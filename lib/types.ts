@@ -6,7 +6,38 @@ export const AiModeSchema = z.enum(["ai", "local"]);
 export const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
-export const LocationSourceSchema = z.enum(["search", "quick", "map", "live", "manual"]);
+export const LocationSourceSchema = z.enum(["search", "quick", "map", "live", "manual", "saved", "suggested", "recent"]);
+export const SavedPlaceCategorySchema = z.enum(["home", "school", "university", "work", "fitness", "custom"]);
+export const SavedPlaceSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().trim().min(1).max(80),
+  placeName: z.string().trim().min(1).max(500),
+  latitude: z.number().finite().min(-90).max(90).optional(),
+  longitude: z.number().finite().min(-180).max(180).optional(),
+  category: SavedPlaceCategorySchema.default("custom"),
+  icon: z.string().trim().max(40).optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).superRefine((value, context) => {
+  if ((value.latitude == null) !== (value.longitude == null)) {
+    context.addIssue({ code: "custom", message: "latitude and longitude must be provided together" });
+  }
+});
+export const RecentPlaceSchema = z.object({
+  placeKey: z.string().min(1),
+  placeName: z.string().trim().min(1).max(500),
+  latitude: z.number().finite().min(-90).max(90).optional(),
+  longitude: z.number().finite().min(-180).max(180).optional(),
+  lastUsedAt: z.string().datetime(),
+  useCount: z.number().int().min(1).default(1),
+  lastUsedDayOfWeek: z.number().int().min(0).max(6).optional(),
+  lastUsedHour: z.number().int().min(0).max(23).optional(),
+  categoryId: z.string().optional(),
+}).superRefine((value, context) => {
+  if ((value.latitude == null) !== (value.longitude == null)) {
+    context.addIssue({ code: "custom", message: "latitude and longitude must be provided together" });
+  }
+});
 export const TaskTimeWindowSchema = z.object({
   start: TimeSchema.optional(),
   end: TimeSchema.optional(),
@@ -24,6 +55,7 @@ export const TaskSchema = z.object({
   locationCapturedAt: z.string().datetime().optional(),
   fixedTime: TimeSchema.optional(),
   durationMin: z.number().int().min(1).max(24 * 60).optional(),
+  travelFromPrevMin: z.number().int().min(0).max(24 * 60).optional(),
   timeWindow: TaskTimeWindowSchema.optional(),
   allDay: z.boolean().default(false),
   lockTime: z.boolean().default(false),
@@ -77,18 +109,22 @@ export const DayMetaSchema = z.object({
   note: z.string().default(""),
 });
 
-export const FocusModeSchema = z.enum(["free", "pomodoro", "custom"]);
+export const FocusModeSchema = z.enum(["free", "pomodoro", "custom", "long", "remaining_task_time"]);
+export const FocusOutcomeSchema = z.enum(["completed", "continued", "rescheduled", "paused", "abandoned"]);
 export const FocusSessionSchema = z.object({
   id: z.string().min(1),
   taskId: z.string().optional(),
+  date: IsoDateSchema.optional(),
   mode: FocusModeSchema,
   startedAt: z.string().datetime(),
   endedAt: z.string().datetime().optional(),
   plannedMin: z.number().int().min(1),
   actualMin: z.number().int().min(0).optional(),
   completed: z.boolean().default(false),
+  outcome: FocusOutcomeSchema.optional(),
+  createdAt: z.string().datetime().optional(),
 });
-export const ActiveFocusSessionSchema = FocusSessionSchema.pick({ id:true, taskId:true, mode:true, startedAt:true, plannedMin:true }).extend({ pausedAt:z.string().datetime().optional(), pausedMs:z.number().int().min(0).default(0) });
+export const ActiveFocusSessionSchema = FocusSessionSchema.pick({ id:true, taskId:true, date:true, mode:true, startedAt:true, plannedMin:true }).extend({ pausedAt:z.string().datetime().optional(), pausedMs:z.number().int().min(0).default(0) });
 
 export const ThemeSchema = z.enum(["system", "light", "dark"]);
 export const AppSettingsSchema = z.object({
@@ -100,7 +136,12 @@ export const AppSettingsSchema = z.object({
   autoMode: z.enum(["manual", "time", "location", "both"]).default("manual"),
   timezone: z.string().default("Asia/Bangkok"),
   calendarProvider: z.enum(["none", "google"]).default("none"),
-});
+  defaultFocusMode: FocusModeSchema.default("pomodoro"),
+  focusBreakBufferMin: z.number().int().min(0).max(60).default(10),
+  useLocationHistory: z.boolean().default(true),
+  suggestFrequentPlaces: z.boolean().default(true),
+  promptSaveFrequentPlaces: z.boolean().default(true),
+}).catchall(z.any());
 
 export const ScheduleItemSchema = z.object({
   taskId: z.string(),
@@ -151,15 +192,20 @@ export const FlowStateSchema = z.object({
   dayMetaByDay: z.record(z.string(), DayMetaSchema),
   focusSessions: z.array(FocusSessionSchema),
   activeFocusSession: ActiveFocusSessionSchema.optional(),
+  savedPlaces: z.array(SavedPlaceSchema).default([]),
+  recentPlaces: z.array(RecentPlaceSchema).default([]),
   settings: AppSettingsSchema,
   reminderLog: z.array(ReminderLogSchema),
   selectedDate: IsoDateSchema,
   updatedAt: z.string().datetime(),
-});
+}).catchall(z.any());
 
 export type Priority = z.infer<typeof PrioritySchema>;
 export type AiMode = z.infer<typeof AiModeSchema>;
 export type LocationSource = z.infer<typeof LocationSourceSchema>;
+export type SavedPlaceCategory = z.infer<typeof SavedPlaceCategorySchema>;
+export type SavedPlace = z.infer<typeof SavedPlaceSchema>;
+export type RecentPlace = z.infer<typeof RecentPlaceSchema>;
 // Existing fixtures predate timestamps/defaulted fields. Keep their construction
 // source-compatible while parsing/storage always produces the normalized output.
 type TaskInput = z.input<typeof TaskSchema>;
@@ -176,6 +222,7 @@ export type DayEnergy = z.infer<typeof DayEnergySchema>;
 export type FocusMode = z.infer<typeof FocusModeSchema>;
 export type DayMeta = z.infer<typeof DayMetaSchema>;
 export type FocusSession = z.infer<typeof FocusSessionSchema>;
+export type FocusOutcome = z.infer<typeof FocusOutcomeSchema>;
 export type ActiveFocusSession = z.infer<typeof ActiveFocusSessionSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 export type FlowState = z.infer<typeof FlowStateSchema>;

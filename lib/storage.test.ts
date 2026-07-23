@@ -76,6 +76,7 @@ describe("storage migration", () => {
       dayMetaByDay: { "2026-07-20": { date: "2026-07-20", energy: "high", note: "พร้อม" } },
       focusSessions: [{ id: "focus", mode: "free", startedAt: timestamp, plannedMin: 25 }],
       reminderLog: [{ id: "notice", taskId: "task", occurrenceDate: "2026-07-20", offsetMin: 10, notifiedAt: timestamp }],
+      integrationMetadata: { keepDuringSalvage: true },
       selectedDate: "2026-07-20",
       updatedAt: timestamp,
     }));
@@ -84,6 +85,7 @@ describe("storage migration", () => {
     expect(state.dayMetaByDay["2026-07-20"].energy).toBe("high");
     expect(state.focusSessions).toHaveLength(1);
     expect(state.reminderLog).toHaveLength(1);
+    expect((state as unknown as Record<string, unknown>).integrationMetadata).toEqual({ keepDuringSalvage: true });
   });
 
   it("can add and reload a new task without replacing migrated tasks", () => {
@@ -166,6 +168,36 @@ describe("storage migration", () => {
     expect(task).not.toHaveProperty("startTime");
     expect(task).not.toHaveProperty("endTime");
     expect(second).toEqual(first);
+  });
+
+  it("adds smart-place defaults without losing existing focus history and stays idempotent", () => {
+    const now = new Date("2026-07-23T00:00:00.000Z");
+    const legacyV2 = {
+      ...createDefaultState(now),
+      savedPlaces: undefined,
+      recentPlaces: undefined,
+      focusSessions: [{ id: "focus-old", taskId: "task", mode: "pomodoro", startedAt: now.toISOString(), plannedMin: 25, actualMin: 20, completed: true }],
+      integrationMetadata: { keep: true },
+    };
+    const first = migrateState(legacyV2, now);
+    const second = migrateState(first, now);
+    expect(first.savedPlaces).toEqual([]);
+    expect(first.recentPlaces).toEqual([]);
+    expect(first.focusSessions[0]).toMatchObject({ id: "focus-old", actualMin: 20 });
+    expect((first as unknown as Record<string, unknown>).integrationMetadata).toEqual({ keep: true });
+    expect(second).toEqual(first);
+  });
+
+  it("deleting a saved place does not change task location snapshots", () => {
+    const state = createDefaultState(new Date("2026-07-23T00:00:00.000Z"));
+    const task = createTask({ title: "กลับบ้าน", place: "บ้าน", lat: 13.7, lng: 100.5, locationSource: "saved" }, 0);
+    const withPlace = {
+      ...state,
+      tasksByDay: addTaskToDate(state.tasksByDay, "2026-07-23", task),
+      savedPlaces: [{ id: "home", label: "บ้าน", placeName: "คอนโด", latitude: 13.7, longitude: 100.5, category: "home" as const, createdAt: state.updatedAt, updatedAt: state.updatedAt }],
+    };
+    const afterDelete = { ...withPlace, savedPlaces: withPlace.savedPlaces.filter((place) => place.id !== "home") };
+    expect(afterDelete.tasksByDay["2026-07-23"][0]).toMatchObject({ place: "บ้าน", lat: 13.7, lng: 100.5 });
   });
 
   it("merges imports by task id", () => {

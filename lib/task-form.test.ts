@@ -95,6 +95,23 @@ describe("task form rules", () => {
     });
   });
 
+  it("clears stale travel time when an edited task changes time or place", () => {
+    const editing: Task = {
+      id: "task-route",
+      title: "ไปประชุม",
+      place: "สยาม",
+      lat: 13.746,
+      lng: 100.534,
+      fixedTime: "10:00",
+      travelFromPrevMin: 25,
+      priority: "normal",
+    };
+    const draft = taskToFormDraft(editing);
+    draft.time = "11:00";
+    const { task } = buildTaskFromFormDraft(draft, { editing });
+    expect(task.travelFromPrevMin).toBeUndefined();
+  });
+
   it("blocks repeated submissions until an explicit retry", () => {
     const guard = createSubmitGuard();
     expect(guard.tryLock()).toBe(true);
