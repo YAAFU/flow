@@ -19,6 +19,7 @@ export type SettingsPanelProps = {
   onTrySampleDay?: () => void;
   onShowCalendarComparison?: () => void;
   onRestartGuide?: () => void;
+  onRestartQuickStart?: () => void;
   /** Must reset onboarding/help state only. Task data remains owned by the caller. */
   onResetGuidance?: () => void | Promise<void>;
 };
@@ -47,6 +48,7 @@ export function SettingsPanel({
   onTrySampleDay,
   onShowCalendarComparison,
   onRestartGuide,
+  onRestartQuickStart,
   onResetGuidance,
 }: SettingsPanelProps) {
   const file=useRef<HTMLInputElement>(null); const [preview,setPreview]=useState<FlowState|null>(null); const [importSource,setImportSource]=useState(""); const [mode,setMode]=useState<"merge"|"replace">("merge"); const [category,setCategory]=useState("");
@@ -68,11 +70,12 @@ export function SettingsPanel({
       <h2 id="flow-help-heading" className="mt-1 font-bold">วิธีใช้ Flow</h2>
       <p className="mt-1 text-sm leading-6 text-[var(--flow-muted)]">กลับมาดูวิธีจัดวันหรือลองตัวอย่างได้ทุกเมื่อ โดยไม่กระทบงานที่บันทึกไว้</p>
       <div className="mt-3 grid gap-2">
-        <HelpAction featured icon={<Sparkles size={17}/>} label="เริ่มทัวร์หลักอีกครั้ง" description="ดู Now / Next การจัดวัน Timeline และ Focus แบบสั้น" onClick={onStartCoreTour}/>
-        <HelpAction icon={<Map size={17}/>} label="ดูทัวร์ฟังก์ชันทั้งหมด" description="ทำความรู้จัก Today, ปฏิทิน ภาพรวม ค้นหา และตั้งค่า" onClick={onStartFullTour}/>
+        <HelpAction featured icon={<Sparkles size={17}/>} label="เริ่ม Quick Start ใหม่" description="เพิ่มงานจริง แล้วให้ Flow จัดเวลาด้วยขั้นตอนแบบลงมือทำ" onClick={onRestartQuickStart}/>
+        <HelpAction icon={<BookOpen size={17}/>} label="เริ่ม Product Guide ใหม่" description="ดูคำแนะนำ 3 หน้าโดยไม่ลบงานหรือการตั้งค่าเดิม" onClick={onRestartGuide}/>
+        <HelpAction icon={<Sparkles size={17}/>} label="เปิด Core Tour" description="ดู Now / Next การจัดวัน Timeline และ Focus แบบสั้น" onClick={onStartCoreTour}/>
+        <HelpAction icon={<Map size={17}/>} label="เปิด Full Tour" description="ทำความรู้จัก Today, ปฏิทิน ภาพรวม ค้นหา และตั้งค่า" onClick={onStartFullTour}/>
         <HelpAction icon={<CalendarPlus size={17}/>} label="ลองสร้างวันตัวอย่าง" description="เลือกตัวอย่าง แก้รายการ และยืนยันก่อนเพิ่มงานจริง" onClick={onTrySampleDay}/>
         <HelpAction icon={<GitCompareArrows size={17}/>} label="Flow ต่างจากปฏิทินอย่างไร" description="ดูว่า Flow ช่วยเปลี่ยนรายการงานให้เป็นแผนของวันอย่างไร" onClick={onShowCalendarComparison}/>
-        <HelpAction icon={<BookOpen size={17}/>} label="เริ่ม Guide ใหม่" description="กลับไปดูคำแนะนำและสร้างแผนวันแรกอีกครั้ง" onClick={onRestartGuide}/>
       </div>
       {!confirmingReset
         ? <button type="button" disabled={!onResetGuidance} onClick={()=>{setResetError("");setConfirmingReset(true);}} className="flow-press mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--flow-line)] px-3 text-sm font-semibold outline-none focus-visible:ring-2 focus-visible:ring-[var(--flow-lime-dark)] disabled:cursor-not-allowed disabled:opacity-45"><RotateCcw aria-hidden size={16}/>รีเซ็ตสถานะคำแนะนำ</button>

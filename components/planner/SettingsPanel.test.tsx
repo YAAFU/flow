@@ -59,15 +59,17 @@ describe("SettingsPanel help actions", () => {
       onTrySampleDay: vi.fn(),
       onShowCalendarComparison: vi.fn(),
       onRestartGuide: vi.fn(),
+      onRestartQuickStart: vi.fn(),
     };
     renderSettings(callbacks);
 
     expect(container?.textContent).toContain("วิธีใช้ Flow");
-    await click(findButton("เริ่มทัวร์หลักอีกครั้ง"));
-    await click(findButton("ดูทัวร์ฟังก์ชันทั้งหมด"));
+    await click(findButton("เริ่ม Quick Start ใหม่"));
+    await click(findButton("เปิด Core Tour"));
+    await click(findButton("เปิด Full Tour"));
     await click(findButton("ลองสร้างวันตัวอย่าง"));
     await click(findButton("Flow ต่างจากปฏิทินอย่างไร"));
-    await click(findButton("เริ่ม Guide ใหม่"));
+    await click(findButton("เริ่ม Product Guide ใหม่"));
 
     Object.values(callbacks).forEach((callback) => expect(callback).toHaveBeenCalledTimes(1));
   });
@@ -99,11 +101,12 @@ describe("SettingsPanel help actions", () => {
     renderSettings();
 
     [
-      "เริ่มทัวร์หลักอีกครั้ง",
-      "ดูทัวร์ฟังก์ชันทั้งหมด",
+      "เริ่ม Quick Start ใหม่",
+      "เปิด Core Tour",
+      "เปิด Full Tour",
       "ลองสร้างวันตัวอย่าง",
       "Flow ต่างจากปฏิทินอย่างไร",
-      "เริ่ม Guide ใหม่",
+      "เริ่ม Product Guide ใหม่",
       "รีเซ็ตสถานะคำแนะนำ",
     ].forEach((label) => expect(findButton(label)?.disabled).toBe(true));
   });

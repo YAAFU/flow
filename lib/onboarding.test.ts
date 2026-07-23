@@ -3,204 +3,178 @@ import {
   LEGACY_ONBOARDING_KEY,
   LEGACY_TOUR_KEY,
   ONBOARDING_KEY,
-  completeOnboarding,
+  completeProductGuide,
+  completeQuickStart,
   createDefaultOnboardingState,
   hasResolvedOnboarding,
   loadOnboardingState,
+  markExistingUserGuidance,
   migrateOnboardingState,
   onboardingEntryPath,
+  recordQuickStartTask,
   resetOnboardingState,
   saveOnboardingState,
-  skipOnboarding,
-  startOnboarding,
-  updateOnboardingState,
-  type OnboardingDraft,
+  setProductGuideStep,
+  skipProductGuide,
+  skipQuickStart,
+  startProductGuide,
+  startQuickStart,
+  updateSampleDay,
 } from "@/lib/onboarding";
 import { STATE_KEY, type StorageLike } from "@/lib/storage";
 
+const NOW = new Date("2026-07-23T08:00:00.000Z");
+
 class MemoryStorage implements StorageLike {
-  readonly values = new Map<string, string>();
+  private values = new Map<string, string>();
   getItem(key: string) { return this.values.get(key) ?? null; }
   setItem(key: string, value: string) { this.values.set(key, value); }
   removeItem(key: string) { this.values.delete(key); }
 }
 
-const NOW = new Date("2026-07-23T08:00:00.000Z");
-
-const DRAFT: OnboardingDraft = {
-  date: "2026-07-24",
-  dayStart: "08:00",
-  dayEnd: "20:00",
-  energy: "medium",
-  items: [
-    {
-      id: "draft-1",
-      title: "ทำงานตัวอย่าง",
-      durationMin: 60,
-      priority: "normal",
-    },
-  ],
-};
-
-describe("onboarding persistence", () => {
-  it("starts from a versioned, resumable default without touching task state", () => {
-    const storage = new MemoryStorage();
-    storage.setItem(STATE_KEY, "task-state-sentinel");
-
-    expect(loadOnboardingState(storage, NOW)).toEqual(createDefaultOnboardingState(NOW));
-    expect(storage.getItem(STATE_KEY)).toBe("task-state-sentinel");
-    expect(storage.getItem(ONBOARDING_KEY)).toBeNull();
+describe("onboarding state v3", () => {
+  it("creates independent Product Guide, Quick Start, Tour and Sample Day states", () => {
+    expect(createDefaultOnboardingState(NOW)).toEqual({
+      schemaVersion: 3,
+      productGuide: { status: "not_started", currentStep: 1 },
+      quickStart: { status: "not_started", stage: "add_task" },
+      tour: { coreStatus: "not_started", fullStatus: "not_started" },
+      sampleDay: { selectedTemplate: null, draft: null },
+      updatedAt: NOW.toISOString(),
+    });
   });
 
-  it("round-trips progress, selected template, and a draft snapshot", () => {
-    const storage = new MemoryStorage();
-    startOnboarding(storage, 2, NOW);
-    const saved = updateOnboardingState(storage, {
-      currentStep: 3,
-      selectedTemplate: "school",
-      draft: DRAFT,
-    }, new Date("2026-07-23T08:01:00.000Z"));
-
-    expect(saved).toMatchObject({
+  it("migrates a started v2 guide and preserves its optional sample draft", () => {
+    const migrated = migrateOnboardingState({
       schemaVersion: 2,
       status: "started",
-      currentStep: 3,
-      selectedTemplate: "school",
-      draft: DRAFT,
-      startedAt: NOW.toISOString(),
-    });
-    expect(loadOnboardingState(storage)).toEqual(saved);
-  });
-
-  it("strips unrelated task/location fields from a legacy draft while salvaging valid items", () => {
-    const migrated = migrateOnboardingState({
-      status: "started",
-      step: 3,
-      template: "study",
-      tasksByDay: { private: true },
-      draftSnapshot: {
-        selectedDate: "2026-07-24",
-        energyLevel: "high",
-        place: "must not persist",
-        items: [
-          {
-            title: "รายการที่ใช้ได้",
-            durationMin: 60,
-            place: "must not persist",
-            lat: 13.7,
-            lng: 100.5,
-          },
-          { broken: true },
-          { title: "รายละเอียดเสียแต่ชื่องานยังใช้ได้", durationMin: -1 },
-        ],
-      },
-    }, NOW);
-
-    expect(migrated).toMatchObject({
-      status: "started",
-      currentStep: 3,
+      currentStep: 4,
       selectedTemplate: "school",
       draft: {
         date: "2026-07-24",
         dayStart: "08:00",
         dayEnd: "20:00",
         energy: "high",
+        items: [{ id: "one", title: "อ่านหนังสือ", durationMin: 60, priority: "normal" }],
       },
-    });
-    expect(migrated.draft?.items).toEqual([
-      {
-        id: "draft-1",
-        title: "รายการที่ใช้ได้",
-        durationMin: 60,
-        priority: "normal",
-      },
-      {
-        id: "draft-3",
-        title: "รายละเอียดเสียแต่ชื่องานยังใช้ได้",
-        priority: "normal",
-      },
-    ]);
-    expect(migrated).not.toHaveProperty("tasksByDay");
-    expect(migrated.draft).not.toHaveProperty("place");
-    expect(migrated.draft?.items[0]).not.toHaveProperty("lat");
-  });
-
-  it("parses corrupt current data safely and falls back to valid legacy progress", () => {
-    const storage = new MemoryStorage();
-    storage.setItem(ONBOARDING_KEY, "{broken");
-    storage.setItem(LEGACY_ONBOARDING_KEY, JSON.stringify({
-      status: "started",
-      currentStep: 2,
-      selectedTemplate: "work",
-    }));
-
-    const state = loadOnboardingState(storage, NOW);
-    expect(state).toMatchObject({
-      schemaVersion: 2,
-      status: "started",
-      currentStep: 2,
-      selectedTemplate: "work",
-    });
-    expect(JSON.parse(storage.getItem(ONBOARDING_KEY)!)).toEqual(state);
-  });
-
-  it("migrates the old tour flag as resolved for a returning user", () => {
-    const storage = new MemoryStorage();
-    storage.setItem(LEGACY_TOUR_KEY, "1");
-
-    const state = loadOnboardingState(storage, NOW);
-    expect(state.status).toBe("completed");
-    expect(state.currentStep).toBe(4);
-    expect(onboardingEntryPath(state)).toBe("/app");
-  });
-
-  it("normalizes old and partially malformed versioned values without crashing", () => {
-    const state = migrateOnboardingState({
-      schemaVersion: 1,
-      completed: true,
-      currentStep: 99,
-      selectedTemplate: "unsupported",
-      updatedAt: "not-a-date",
+      startedAt: NOW.toISOString(),
     }, NOW);
 
-    expect(state).toMatchObject({
-      schemaVersion: 2,
-      status: "completed",
-      currentStep: 4,
-      selectedTemplate: null,
-      updatedAt: NOW.toISOString(),
+    expect(migrated).toMatchObject({
+      schemaVersion: 3,
+      productGuide: { status: "started", currentStep: 3 },
+      quickStart: { status: "not_started", stage: "add_task" },
+      sampleDay: {
+        selectedTemplate: "school",
+        draft: { date: "2026-07-24", energy: "high" },
+      },
     });
   });
 
-  it("represents started, skipped, and completed as distinct states", () => {
-    const storage = new MemoryStorage();
-    expect(startOnboarding(storage, 2, NOW)).toMatchObject({
-      status: "started",
-      currentStep: 2,
-    });
-    expect(skipOnboarding(storage, NOW)).toMatchObject({
-      status: "skipped",
-      currentStep: 2,
-    });
+  it.each(["completed", "skipped"] as const)(
+    "does not force an existing v2 %s user into Quick Start",
+    (status) => {
+      const migrated = migrateOnboardingState({ schemaVersion: 2, status }, NOW);
+      expect(migrated.productGuide.status).toBe(status);
+      expect(migrated.quickStart.status).toBe("skipped");
+      expect(onboardingEntryPath(migrated)).toBe("/app");
+    },
+  );
 
-    startOnboarding(storage, 1, NOW);
-    expect(completeOnboarding(storage, NOW)).toMatchObject({
+  it("migrates the old tour flag without scheduling any automatic tour", () => {
+    const storage = new MemoryStorage();
+    storage.setItem(LEGACY_TOUR_KEY, "1");
+    const state = loadOnboardingState(storage, NOW);
+    expect(state.productGuide.status).toBe("completed");
+    expect(state.quickStart.status).toBe("skipped");
+    expect(state.tour.coreStatus).toBe("completed");
+  });
+
+  it("is idempotent when a v3 value is loaded repeatedly", () => {
+    const storage = new MemoryStorage();
+    const first = saveOnboardingState(storage, {
+      ...createDefaultOnboardingState(NOW),
+      productGuide: { status: "started", currentStep: 2, startedAt: NOW.toISOString() },
+    }, NOW);
+    expect(loadOnboardingState(storage, NOW)).toEqual(first);
+    expect(loadOnboardingState(storage, NOW)).toEqual(first);
+  });
+
+  it("tracks Product Guide and Quick Start independently", () => {
+    const storage = new MemoryStorage();
+    startProductGuide(storage, 1, NOW);
+    setProductGuideStep(storage, 2, NOW);
+    completeProductGuide(storage, NOW);
+    let state = startQuickStart(storage, NOW);
+    expect(state.productGuide.status).toBe("completed");
+    expect(state.quickStart).toMatchObject({ status: "started", stage: "add_task" });
+
+    state = recordQuickStartTask(storage, "task-1", false, NOW);
+    expect(state.quickStart).toMatchObject({ stage: "schedule_task", taskId: "task-1" });
+    state = recordQuickStartTask(storage, "task-1", true, NOW);
+    expect(state.quickStart.stage).toBe("completed");
+    expect(state.quickStart.status).toBe("started");
+    state = completeQuickStart(storage, NOW);
+    expect(state.quickStart).toMatchObject({
       status: "completed",
-      currentStep: 4,
+      stage: "completed",
       completedAt: NOW.toISOString(),
     });
+    state = startProductGuide(storage, 1, NOW);
+    expect(state.quickStart.status).toBe("completed");
   });
 
-  it("reset removes only onboarding keys and never tasks or settings", () => {
+  it("keeps add_task when a form closes without recordQuickStartTask", () => {
+    const storage = new MemoryStorage();
+    const started = startQuickStart(storage, NOW);
+    expect(loadOnboardingState(storage, NOW).quickStart).toEqual(started.quickStart);
+  });
+
+  it("can skip each first-time experience without changing the other", () => {
+    const storage = new MemoryStorage();
+    startProductGuide(storage, 2, NOW);
+    startQuickStart(storage, NOW);
+    skipProductGuide(storage, NOW);
+    const state = skipQuickStart(storage, NOW);
+    expect(state.productGuide.status).toBe("skipped");
+    expect(state.quickStart.status).toBe("skipped");
+  });
+
+  it("marks only uninitialized users with existing tasks as existing users", () => {
+    const storage = new MemoryStorage();
+    const existing = markExistingUserGuidance(storage, true, NOW);
+    expect(existing.productGuide.status).toBe("skipped");
+    expect(existing.quickStart.status).toBe("skipped");
+
+    const newStorage = new MemoryStorage();
+    expect(markExistingUserGuidance(newStorage, false, NOW).productGuide.status).toBe("not_started");
+  });
+
+  it("keeps Sample Day progress out of Product Guide progress", () => {
+    const storage = new MemoryStorage();
+    const state = updateSampleDay(storage, {
+      selectedTemplate: "work",
+      draft: {
+        date: "2026-07-24",
+        dayStart: "08:00",
+        dayEnd: "20:00",
+        energy: "medium",
+        items: [{ id: "sample", title: "ประชุม", durationMin: 30, priority: "normal" }],
+      },
+    }, NOW);
+    expect(state.productGuide).toEqual({ status: "not_started", currentStep: 1 });
+    expect(state.sampleDay.selectedTemplate).toBe("work");
+  });
+
+  it("reset removes guidance keys only and never task/settings state", () => {
     const storage = new MemoryStorage();
     storage.setItem(STATE_KEY, "task-state-sentinel");
     storage.setItem("unrelated_settings", "keep");
-    storage.setItem(ONBOARDING_KEY, JSON.stringify({ status: "started" }));
+    storage.setItem(ONBOARDING_KEY, JSON.stringify(createDefaultOnboardingState(NOW)));
     storage.setItem(LEGACY_ONBOARDING_KEY, "{}");
     storage.setItem(LEGACY_TOUR_KEY, "1");
 
-    const reset = resetOnboardingState(storage);
-    expect(reset.status).toBe("not_started");
+    resetOnboardingState(storage);
     expect(storage.getItem(ONBOARDING_KEY)).toBeNull();
     expect(storage.getItem(LEGACY_ONBOARDING_KEY)).toBeNull();
     expect(storage.getItem(LEGACY_TOUR_KEY)).toBeNull();
@@ -214,9 +188,8 @@ describe("onboarding persistence", () => {
       setItem() { throw new Error("blocked"); },
       removeItem() { throw new Error("blocked"); },
     };
-
     expect(() => loadOnboardingState(unavailable, NOW)).not.toThrow();
-    expect(saveOnboardingState(unavailable, { status: "started" }, NOW).status).toBe("started");
+    expect(() => startQuickStart(unavailable, NOW)).not.toThrow();
     expect(() => resetOnboardingState(unavailable)).not.toThrow();
   });
 });
@@ -227,34 +200,10 @@ describe("onboarding entry routing", () => {
     ["started", "/guide"],
     ["skipped", "/app"],
     ["completed", "/app"],
-  ] as const)("routes %s to %s without a redirect loop", (status, path) => {
-    const state = { ...createDefaultOnboardingState(NOW), status };
+  ] as const)("routes Product Guide %s to %s", (status, path) => {
+    const state = createDefaultOnboardingState(NOW);
+    state.productGuide.status = status;
     expect(onboardingEntryPath(state)).toBe(path);
     expect(hasResolvedOnboarding(state)).toBe(path === "/app");
-  });
-
-  it.each([
-    ["not_started", "/guide"],
-    ["started", "/guide"],
-    ["skipped", "/app"],
-    ["completed", "/app"],
-  ] as const)("resolves persisted %s state to %s for login and guest entry", (status, path) => {
-    const storage = new MemoryStorage();
-    saveOnboardingState(storage, {
-      ...createDefaultOnboardingState(NOW),
-      status,
-      currentStep: status === "completed" ? 4 : 2,
-    }, NOW);
-
-    const destination = onboardingEntryPath(loadOnboardingState(storage, NOW));
-    expect(destination).toBe(path);
-    expect(destination).not.toBe("/login");
-  });
-
-  it("routes unavailable or corrupt storage to the first-time guide without throwing", () => {
-    const storage = new MemoryStorage();
-    storage.setItem(ONBOARDING_KEY, "{broken");
-
-    expect(onboardingEntryPath(loadOnboardingState(storage, NOW))).toBe("/guide");
   });
 });

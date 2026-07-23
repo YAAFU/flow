@@ -34,18 +34,21 @@ import {
   type GuidePlanSettings,
 } from "@/lib/guide-planner";
 import {
-  completeOnboarding,
+  completeProductGuide,
   loadOnboardingState,
-  resetOnboardingState,
-  skipOnboarding,
-  startOnboarding,
-  updateOnboardingState,
+  setProductGuideStep,
+  skipProductGuide,
+  skipQuickStart,
+  startProductGuide,
+  startQuickStart,
+  updateSampleDay,
 } from "@/lib/onboarding";
 import { trackProductEvent } from "@/lib/product-analytics";
 import { PlanResultSchema, type DayEnergy, type PlanResult } from "@/lib/types";
 import { localDateKey } from "@/lib/time";
 
 type GuideStep = 1 | 2 | 3 | 4;
+type GuideMode = "product" | "sample" | "comparison";
 type PlanVariantName = "A" | "B";
 
 function durationBucket(startedAt: number) {
@@ -134,7 +137,7 @@ function StepTwo() {
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-[var(--flow-lime)] text-[#111111]"><Sparkles size={20} aria-hidden /></div>
           <h2 className="mt-4 text-lg font-bold">Flow</h2>
           <ul className="mt-3 space-y-3 text-sm leading-6 text-white/75">
-            {["เริ่มจากรายการสิ่งที่ต้องทำ", "ช่วยจัดเวลาและลำดับ", "ตรวจช่วงเวลาชนก่อนบันทึก", "แสดงงานตอนนี้ งานถัดไป และเวลาว่าง", "ต่อไปยัง Timeline และ Focus ได้"].map((item) => <li key={item} className="flex gap-2"><Check size={16} className="mt-1 shrink-0 text-[var(--flow-lime)]" aria-hidden />{item}</li>)}
+            {["เริ่มจากรายการสิ่งที่ต้องทำ", "ช่วยจัดเวลาและลำดับ", "ตรวจช่วงเวลาชนก่อนบันทึก", "แสดงงานตอนนี้ งานถัดไป และเวลาว่าง", "ผู้ใช้ยังเป็นคนยืนยันแผนสุดท้าย"].map((item) => <li key={item} className="flex gap-2"><Check size={16} className="mt-1 shrink-0 text-[var(--flow-lime)]" aria-hidden />{item}</li>)}
           </ul>
         </article>
       </div>
@@ -142,7 +145,47 @@ function StepTwo() {
   );
 }
 
-function StepThree({
+function ProductStepThree() {
+  const steps = [
+    {
+      title: "เพิ่มสิ่งที่ต้องทำ",
+      description: "พิมพ์งานแรกของวันนี้ ไม่จำเป็นต้องกำหนดเวลาทันที",
+    },
+    {
+      title: "ให้ Flow จัดเวลา",
+      description: "Flow จะเสนอเวลาและตรวจช่วงชนก่อนบันทึก",
+    },
+    {
+      title: "เริ่มลงมือทำ",
+      description: "ดู Timeline และเข้าโหมด Focus เมื่อต้องการเริ่มงาน",
+    },
+  ];
+  return (
+    <section aria-labelledby="guide-step-three">
+      <p className="text-xs font-semibold text-[var(--flow-lime-dark)]">เริ่มใช้จริงใน 3 ขั้น</p>
+      <h1 id="guide-step-three" className="mt-2 text-[clamp(1.75rem,7vw,2.5rem)] font-bold leading-tight tracking-[-0.03em]">
+        เพิ่มงาน แล้วให้ Flow เปลี่ยนเป็นแผนของวัน
+      </h1>
+      <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--flow-muted)]">
+        คุณจะได้ลงมือทำกับงานจริงทีละขั้น และยืนยันแผนก่อน Flow เปลี่ยนเวลาใน Timeline
+      </p>
+      <ol className="mt-7 grid gap-3 md:grid-cols-3">
+        {steps.map((item, index) => (
+          <li key={item.title} className="flow-surface rounded-[22px] border-[1.5px] border-[var(--flow-line)] p-4">
+            <span className="font-grotesk grid h-9 w-9 place-items-center rounded-full bg-[var(--flow-lime)] text-sm font-bold text-[#111111]">{index + 1}</span>
+            <h2 className="mt-4 font-bold">{item.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-[var(--flow-muted)]">{item.description}</p>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-5 rounded-2xl border border-[var(--flow-line)] px-4 py-3 text-sm leading-6 text-[var(--flow-muted)]">
+        งานแรกเป็นข้อมูลจริงของคุณ ไม่มีการสร้างงานตัวอย่างอัตโนมัติ และคุณข้าม Quick Start ได้ทุกเมื่อ
+      </p>
+    </section>
+  );
+}
+
+function SampleTemplateStep({
   template,
   drafts,
   onTemplate,
@@ -224,9 +267,11 @@ export function ProductGuide() {
   const router = useRouter();
   const { state: flowState, hydrated, updateFlow } = useFlowStore();
   const initialized = useRef(false);
+  const exiting = useRef(false);
   const startedAt = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
   const [resumed, setResumed] = useState(false);
+  const [mode, setMode] = useState<GuideMode>("product");
   const [step, setStep] = useState<GuideStep>(1);
   const [template, setTemplate] = useState<GuideTemplate | null>(null);
   const [drafts, setDrafts] = useState<GuideDraftItem[]>([]);
@@ -249,55 +294,53 @@ export function ProductGuide() {
       const requestedStart = params.get("start");
       const shouldRestart = params.get("restart") === "1";
 
-      if (shouldRestart) resetOnboardingState(window.localStorage);
       const saved = loadOnboardingState(window.localStorage);
+      if (shouldRestart) startProductGuide(window.localStorage, 1);
 
       if (requestedStart === "templates") {
-        startOnboarding(window.localStorage, 3);
+        setMode("sample");
         setStep(3);
-        setTemplate(null);
-        setDrafts([]);
-        trackProductEvent("guide_started", { entryPoint: "empty_state" });
-      } else if (requestedStart === "comparison") {
-        startOnboarding(window.localStorage, 2);
-        setStep(2);
-        trackProductEvent("guide_started", { entryPoint: "settings" });
-      } else if (saved.status === "started") {
-        setStep(saved.currentStep as GuideStep);
-        setTemplate(saved.selectedTemplate);
-        if (saved.draft) {
-          setDate(saved.draft.date);
-          setDayStart(saved.draft.dayStart);
-          setDayEnd(saved.draft.dayEnd);
-          setEnergy(saved.draft.energy);
-          setDrafts(saved.draft.items.map((item) => ({
+        setTemplate(saved.sampleDay.selectedTemplate);
+        if (saved.sampleDay.draft) {
+          setDate(saved.sampleDay.draft.date);
+          setDayStart(saved.sampleDay.draft.dayStart);
+          setDayEnd(saved.sampleDay.draft.dayEnd);
+          setEnergy(saved.sampleDay.draft.energy);
+          setDrafts(saved.sampleDay.draft.items.map((item) => ({
             id: item.id,
             title: item.title,
             durationMin: item.durationMin ?? 60,
             fixedTime: item.fixedTime,
           })));
         }
-        setResumed(saved.currentStep > 1 || Boolean(saved.draft));
-        if (saved.startedAt) startedAt.current = Date.parse(saved.startedAt);
+      } else if (requestedStart === "comparison") {
+        setMode("comparison");
+        setStep(2);
+      } else if (!shouldRestart && saved.productGuide.status === "started") {
+        setStep(saved.productGuide.currentStep as GuideStep);
+        setResumed(saved.productGuide.currentStep > 1);
+        if (saved.productGuide.startedAt) startedAt.current = Date.parse(saved.productGuide.startedAt);
       }
 
       if (requestedStart || shouldRestart) {
         window.history.replaceState(window.history.state, "", "/guide");
       }
-      trackProductEvent("guide_viewed", { entryPoint: "guide" });
+      if (!requestedStart || shouldRestart) {
+        trackProductEvent("product_guide_started", { entryPoint: "guide" });
+      }
       setReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [hydrated]);
 
   useEffect(() => {
-    if (!ready) return;
-    if (step < 3) {
-      updateOnboardingState(window.localStorage, { currentStep: step });
+    if (!ready || exiting.current) return;
+    if (mode === "product") {
+      setProductGuideStep(window.localStorage, Math.min(step, 3));
       return;
     }
-    updateOnboardingState(window.localStorage, {
-      currentStep: step,
+    if (mode !== "sample") return;
+    updateSampleDay(window.localStorage, {
       selectedTemplate: template,
       draft: {
         date,
@@ -313,36 +356,44 @@ export function ProductGuide() {
         })),
       },
     });
-  }, [date, dayEnd, dayStart, drafts, energy, ready, step, template]);
+  }, [date, dayEnd, dayStart, drafts, energy, mode, ready, step, template]);
 
   const usefulDrafts = useMemo(() => drafts.filter((item) => item.title.trim()), [drafts]);
   const activePlan = plan?.plans[variant] ?? null;
 
   const setCurrentStep = (next: GuideStep) => {
-    if (next > step) trackProductEvent("guide_step_completed", { step });
+    if (mode === "product" && next > step) {
+      trackProductEvent("product_guide_step_completed", { step });
+    }
     setError("");
     setPlan(null);
     setStep(next);
-    updateOnboardingState(window.localStorage, { status: "started", currentStep: next });
+    if (mode === "product") setProductGuideStep(window.localStorage, next);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const beginGuide = () => {
-    startOnboarding(window.localStorage, 2);
-    trackProductEvent("guide_started", { entryPoint: "guide" });
+    startProductGuide(window.localStorage, 2);
     setCurrentStep(2);
   };
 
   const skipGuide = () => {
-    skipOnboarding(window.localStorage);
-    trackProductEvent("guide_skipped", { step, entryPoint: "guide" });
+    if (mode !== "product") {
+      exiting.current = true;
+      router.replace("/app");
+      return;
+    }
+    exiting.current = true;
+    skipProductGuide(window.localStorage);
+    skipQuickStart(window.localStorage);
+    trackProductEvent("product_guide_skipped", { step, entryPoint: "guide" });
     router.replace("/app");
   };
 
   const restartGuide = () => {
-    resetOnboardingState(window.localStorage);
-    startOnboarding(window.localStorage, 1);
+    startProductGuide(window.localStorage, 1);
     startedAt.current = Date.now();
+    setMode("product");
     setStep(1);
     setTemplate(null);
     setDrafts([]);
@@ -353,6 +404,19 @@ export function ProductGuide() {
     setPlan(null);
     setError("");
     setResumed(false);
+  };
+
+  const finishProductGuide = () => {
+    exiting.current = true;
+    trackProductEvent("product_guide_step_completed", { step: 3 });
+    completeProductGuide(window.localStorage);
+    startQuickStart(window.localStorage);
+    trackProductEvent("product_guide_completed", {
+      completionStatus: "success",
+      durationBucket: durationBucket(startedAt.current ?? Date.now()),
+    });
+    trackProductEvent("quick_start_started", { entryPoint: "guide" });
+    router.replace("/app?quickStart=1");
   };
 
   const chooseTemplate = (nextTemplate: GuideTemplate) => {
@@ -435,13 +499,7 @@ export function ProductGuide() {
     const settings: GuidePlanSettings = { date, dayStart, dayEnd, energy, breakMin: 30 };
     const hadNoTasks = Object.values(flowState.tasksByDay).flat().length === 0;
     updateFlow((previous) => applyGuidePlan(previous, { settings, drafts: plannerDrafts, plan, variant }));
-    completeOnboarding(window.localStorage);
     if (hadNoTasks) trackProductEvent("first_task_created", { entryPoint: "guide" });
-    trackProductEvent("guide_step_completed", { step: 4 });
-    trackProductEvent("guide_completed", {
-      completionStatus: "success",
-      durationBucket: durationBucket(startedAt.current ?? Date.now()),
-    });
     router.replace(`/app?date=${encodeURIComponent(date)}&view=timeline&onboarding=success`);
   };
 
@@ -454,10 +512,16 @@ export function ProductGuide() {
       <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-6 sm:pt-7">
         <header className="flex items-start justify-between gap-4">
           <a href="/login" className="font-grotesk inline-flex min-h-11 items-center text-[24px] font-bold tracking-[-0.04em]">flow<span className="text-[var(--flow-lime-dark)]">_</span></a>
-          <button type="button" onClick={skipGuide} className="flow-press min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--flow-muted)]">ข้ามและเริ่มใช้</button>
+          <button type="button" onClick={skipGuide} className="flow-press min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--flow-muted)]">
+            {mode === "product" ? "ข้ามและเริ่มใช้" : "กลับไปใช้ Flow"}
+          </button>
         </header>
-        <div className="mt-4 rounded-2xl border border-[var(--flow-line)] p-3 sm:p-4"><GuideProgress current={step} /></div>
-        {resumed && (
+        {mode === "product"
+          ? <div className="mt-4 rounded-2xl border border-[var(--flow-line)] p-3 sm:p-4"><GuideProgress current={Math.min(step, 3)} total={3} /></div>
+          : <div className="mt-4 rounded-2xl border border-[var(--flow-line)] p-3 text-sm font-semibold">
+            {mode === "sample" ? `ลองด้วยวันตัวอย่าง · ${step === 3 ? "เลือกรายการ" : "ตรวจแผน"}` : "Flow ต่างจากปฏิทินอย่างไร"}
+          </div>}
+        {resumed && mode === "product" && (
           <div role="status" className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-[var(--flow-lime)] px-3 py-2.5 text-sm text-[#111111]">
             <span>กลับมาต่อจากฉบับร่างเดิมแล้ว</span>
             <button type="button" onClick={restartGuide} className="min-h-11 shrink-0 rounded-lg px-2 font-semibold underline">เริ่มใหม่</button>
@@ -465,10 +529,11 @@ export function ProductGuide() {
         )}
 
         <div key={step} className="flow-view mt-7">
-          {step === 1 && <StepOne />}
-          {step === 2 && <StepTwo />}
-          {step === 3 && <StepThree template={template} drafts={drafts} onTemplate={chooseTemplate} onChange={updateDraft} onDelete={(id) => setDrafts((current) => current.filter((item) => item.id !== id))} onAdd={addDraft} />}
-          {step === 4 && (
+          {mode === "product" && step === 1 && <StepOne />}
+          {(mode === "product" || mode === "comparison") && step === 2 && <StepTwo />}
+          {mode === "product" && step === 3 && <ProductStepThree />}
+          {mode === "sample" && step === 3 && <SampleTemplateStep template={template} drafts={drafts} onTemplate={chooseTemplate} onChange={updateDraft} onDelete={(id) => setDrafts((current) => current.filter((item) => item.id !== id))} onAdd={addDraft} />}
+          {mode === "sample" && step === 4 && (
             <section aria-labelledby="guide-step-four">
               <p className="text-xs font-semibold text-[var(--flow-lime-dark)]">ตรวจแล้วค่อยบันทึก</p>
               <h1 id="guide-step-four" className="mt-2 text-[clamp(1.7rem,7vw,2.4rem)] font-bold leading-tight tracking-[-0.03em]">สร้างแผนวันแรก</h1>
@@ -521,19 +586,28 @@ export function ProductGuide() {
         </div>
       </div>
 
-      {step < 4 && (
+      {mode === "product" && (
         <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--flow-line)] bg-[color-mix(in_srgb,var(--flow-paper)_94%,transparent)] px-4 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
           <div className="mx-auto flex w-full max-w-[760px] gap-2">
             {step > 1 && <button type="button" onClick={() => setCurrentStep((step - 1) as GuideStep)} className="flow-press flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl border-[1.5px] border-[var(--flow-line)] px-3 font-semibold"><ArrowLeft size={17} aria-hidden />ย้อนกลับ</button>}
             <button
               type="button"
-              onClick={() => step === 1 ? beginGuide() : setCurrentStep((step + 1) as GuideStep)}
-              disabled={step === 3 && (!template || usefulDrafts.length === 0)}
+              onClick={() => step === 1 ? beginGuide() : step === 3 ? finishProductGuide() : setCurrentStep((step + 1) as GuideStep)}
               className="flow-press flow-inverse flex min-h-12 flex-[1.4] items-center justify-center gap-2 rounded-xl px-4 font-semibold disabled:opacity-45"
             >
-              {step === 3 ? "ใช้ฉบับร่างนี้" : "ต่อไป"}<ArrowRight size={17} className="text-[var(--flow-lime)]" aria-hidden />
+              {step === 3 ? "เริ่มวางแผนวันแรก" : "ต่อไป"}<ArrowRight size={17} className="text-[var(--flow-lime)]" aria-hidden />
             </button>
           </div>
+        </div>
+      )}
+      {mode === "sample" && step === 3 && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--flow-line)] bg-[color-mix(in_srgb,var(--flow-paper)_94%,transparent)] px-4 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+          <button type="button" onClick={() => setCurrentStep(4)} disabled={!template || usefulDrafts.length === 0} className="flow-press flow-inverse mx-auto flex min-h-12 w-full max-w-[760px] items-center justify-center gap-2 rounded-xl px-4 font-semibold disabled:opacity-45">ใช้ฉบับร่างนี้<ArrowRight size={17} className="text-[var(--flow-lime)]" aria-hidden /></button>
+        </div>
+      )}
+      {mode === "comparison" && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--flow-line)] bg-[color-mix(in_srgb,var(--flow-paper)_94%,transparent)] px-4 py-3 pb-[max(.75rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+          <button type="button" onClick={() => router.replace("/app")} className="flow-press flow-inverse mx-auto flex min-h-12 w-full max-w-[760px] items-center justify-center rounded-xl px-4 font-semibold">กลับไปใช้ Flow</button>
         </div>
       )}
     </main>

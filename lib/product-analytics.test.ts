@@ -45,6 +45,20 @@ describe("product analytics privacy boundary", () => {
     })).toEqual({});
   });
 
+  it("never includes task or location data in Quick Start events", () => {
+    expect(sanitizeProductEventMetadata("quick_start_task_created", {
+      title: "ประชุมลับ",
+      place: "บ้าน",
+      latitude: 13.7,
+      longitude: 100.5,
+      taskId: "private-id",
+    })).toEqual({});
+    expect(sanitizeProductEventMetadata("quick_start_plan_applied", {
+      plannerMode: "local",
+      taskId: "private-id",
+    })).toEqual({ plannerMode: "local" });
+  });
+
   it("sends a frozen, sanitized event to an injected provider", () => {
     const events: ProductAnalyticsEvent[] = [];
     configureProductAnalytics({

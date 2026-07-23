@@ -38,7 +38,7 @@ export function TaskListView({ tasks, categories, onToggle, onEdit, onDelete, on
         </div>
         <p className="mt-3 text-sm leading-6 text-[var(--flow-muted)]">เพิ่มงาน 2–3 อย่าง แล้วให้ Flow ช่วยจัดเวลาและลำดับให้เหมาะกับวันของคุณ</p>
         <div className="mt-4 grid gap-2">
-          <button data-tour="primary-action" type="button" onClick={onAdd} className="flow-press flow-inverse min-h-12 rounded-xl px-4 text-sm font-semibold">เพิ่มงานแรก</button>
+        <button data-tour="primary-action" data-quick-start="add-task" type="button" onClick={onAdd} className="flow-press flow-inverse min-h-12 rounded-xl px-4 text-sm font-semibold">เพิ่มงานแรก</button>
           <div className="grid grid-cols-[1.35fr_.65fr] gap-2">
             <button type="button" onClick={onTryExample} className="flow-press min-h-12 rounded-xl border-[1.5px] border-[var(--flow-line)] bg-[var(--flow-lime)] px-2 text-sm font-semibold leading-5 text-[#111111]">ลองด้วยวันตัวอย่าง</button>
             <button type="button" onClick={onOpenGuide} className="flow-press min-h-12 rounded-xl border border-[var(--flow-line)] px-2 text-sm font-semibold text-[var(--flow-muted)] underline decoration-[var(--flow-lime-dark)] decoration-2 underline-offset-4">ดูวิธีใช้</button>

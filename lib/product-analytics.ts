@@ -10,6 +10,16 @@ export const PRODUCT_EVENT_NAMES = [
   "first_timeline_viewed",
   "first_focus_started",
   "tour_reopened",
+  "product_guide_started",
+  "product_guide_step_completed",
+  "product_guide_completed",
+  "product_guide_skipped",
+  "quick_start_started",
+  "quick_start_task_created",
+  "quick_start_planner_opened",
+  "quick_start_plan_applied",
+  "quick_start_completed",
+  "quick_start_skipped",
 ] as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
@@ -81,6 +91,16 @@ const EVENT_METADATA_KEYS: Record<ProductEventName, readonly MetadataKey[]> = {
   first_timeline_viewed: ["entryPoint"],
   first_focus_started: ["entryPoint"],
   tour_reopened: ["entryPoint"],
+  product_guide_started: ["entryPoint"],
+  product_guide_step_completed: ["step"],
+  product_guide_completed: ["completionStatus", "durationBucket"],
+  product_guide_skipped: ["step", "entryPoint"],
+  quick_start_started: ["entryPoint"],
+  quick_start_task_created: [],
+  quick_start_planner_opened: [],
+  quick_start_plan_applied: ["plannerMode"],
+  quick_start_completed: ["completionStatus"],
+  quick_start_skipped: ["entryPoint"],
 };
 
 const ENTRY_POINTS = new Set<string>(ANALYTICS_ENTRY_POINTS);

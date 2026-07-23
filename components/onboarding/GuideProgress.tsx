@@ -1,6 +1,6 @@
 "use client";
 
-export function GuideProgress({ current, total = 4 }: { current: number; total?: number }) {
+export function GuideProgress({ current, total = 3 }: { current: number; total?: number }) {
   const value = Math.min(total, Math.max(1, current));
   return (
     <div className="min-w-0" aria-label={`ขั้นที่ ${value} จาก ${total}`}>

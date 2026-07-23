@@ -2,36 +2,30 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultState } from "@/lib/storage";
-import {
-  ONBOARDING_KEY,
-  createDefaultOnboardingState,
-  loadOnboardingState,
-  saveOnboardingState,
-} from "@/lib/onboarding";
-import type { FlowState } from "@/lib/types";
+import { loadOnboardingState } from "@/lib/onboarding";
 
-const guideRuntime = vi.hoisted(() => ({
+const runtime = vi.hoisted(() => ({
   flowState: null as unknown,
-  hydrated: true,
-  updateCalls: 0,
   routerReplace: vi.fn(),
+  track: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    replace: guideRuntime.routerReplace,
-  }),
+  useRouter: () => ({ replace: runtime.routerReplace }),
 }));
 
 vi.mock("@/hooks/useFlowStore", () => ({
   useFlowStore: () => ({
-    state: guideRuntime.flowState,
-    hydrated: guideRuntime.hydrated,
+    state: runtime.flowState,
+    hydrated: true,
     updateFlow: (updater: (previous: unknown) => unknown) => {
-      guideRuntime.updateCalls += 1;
-      guideRuntime.flowState = updater(guideRuntime.flowState);
+      runtime.flowState = updater(runtime.flowState);
     },
   }),
+}));
+
+vi.mock("@/lib/product-analytics", () => ({
+  trackProductEvent: runtime.track,
 }));
 
 import GuidePage from "@/app/guide/page";
@@ -40,25 +34,18 @@ import { ProductGuide } from "@/components/onboarding/ProductGuide";
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
 
-const PLAN_DATE = "2026-07-24";
-
-function flowState(): FlowState {
-  return guideRuntime.flowState as FlowState;
+function findButton(label: string) {
+  return [...(container?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) =>
+    button.textContent?.replace(/\s+/g, " ").trim().includes(label),
+  );
 }
 
-function buttonInHeader(): HTMLButtonElement | undefined {
-  return container?.querySelector("header button") as HTMLButtonElement | undefined;
-}
-
-function fixedActionButtons(): HTMLButtonElement[] {
-  return [
-    ...(container?.querySelectorAll<HTMLButtonElement>("div.fixed button") ?? []),
-  ];
-}
-
-function currentStep(step: number): HTMLElement | null | undefined {
-  const names = ["one", "two", "three", "four"];
-  return container?.querySelector(`#guide-step-${names[step - 1]}`);
+async function click(button: HTMLButtonElement | undefined) {
+  expect(button).toBeTruthy();
+  await act(async () => {
+    button?.click();
+    await Promise.resolve();
+  });
 }
 
 async function renderGuide() {
@@ -66,67 +53,7 @@ async function renderGuide() {
     root?.render(<ProductGuide />);
     await new Promise((resolve) => window.setTimeout(resolve, 5));
   });
-  await vi.waitFor(() => expect(currentStep(1) || currentStep(2) || currentStep(3) || currentStep(4)).toBeTruthy());
-}
-
-async function click(element: HTMLButtonElement | null | undefined) {
-  expect(element).toBeTruthy();
-  await act(async () => {
-    element?.click();
-    await Promise.resolve();
-  });
-}
-
-function setInputValue(input: HTMLInputElement, value: string) {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-  act(() => {
-    setter?.call(input, value);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-  });
-}
-
-async function goToTemplateStep() {
-  await click(fixedActionButtons().at(-1));
-  await vi.waitFor(() => expect(currentStep(2)).toBeTruthy());
-  await click(fixedActionButtons().at(-1));
-  await vi.waitFor(() => expect(currentStep(3)).toBeTruthy());
-}
-
-function seedResumableDraft(step: 3 | 4 = 3) {
-  saveOnboardingState(window.localStorage, {
-    ...createDefaultOnboardingState(new Date("2026-07-23T08:00:00.000Z")),
-    status: "started",
-    currentStep: step,
-    selectedTemplate: "work",
-    draft: {
-      date: PLAN_DATE,
-      dayStart: "08:00",
-      dayEnd: "20:00",
-      energy: "medium",
-      items: [
-        {
-          id: "resume-1",
-          title: "งานที่บันทึกไว้ในฉบับร่าง",
-          durationMin: 60,
-          priority: "normal",
-        },
-        {
-          id: "resume-2",
-          title: "พักระหว่างงาน",
-          durationMin: 30,
-          priority: "normal",
-        },
-      ],
-    },
-  }, new Date("2026-07-23T08:00:00.000Z"));
-}
-
-function setOnline(value: boolean) {
-  Object.defineProperty(window.navigator, "onLine", {
-    configurable: true,
-    value,
-  });
+  await vi.waitFor(() => expect(container?.textContent).not.toContain("กำลังเตรียม Guide"));
 }
 
 beforeEach(() => {
@@ -135,11 +62,9 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn());
   window.localStorage.clear();
   window.history.replaceState({}, "", "/guide");
-  setOnline(true);
-  guideRuntime.flowState = createDefaultState(new Date("2026-07-23T00:00:00.000Z"));
-  guideRuntime.hydrated = true;
-  guideRuntime.updateCalls = 0;
-  guideRuntime.routerReplace.mockReset();
+  runtime.flowState = createDefaultState(new Date("2026-07-23T00:00:00.000Z"));
+  runtime.routerReplace.mockReset();
+  runtime.track.mockReset();
   document.body.replaceChildren();
   container = document.createElement("div");
   document.body.append(container);
@@ -153,170 +78,89 @@ afterEach(() => {
   document.body.replaceChildren();
   window.localStorage.clear();
   vi.unstubAllGlobals();
-  vi.restoreAllMocks();
 });
 
 describe("/guide route", () => {
-  it("renders the real ProductGuide instead of a detached landing page", () => {
-    const element = GuidePage();
-    expect(element.type).toBe(ProductGuide);
+  it("renders ProductGuide", () => {
+    expect(GuidePage().type).toBe(ProductGuide);
   });
 });
 
-describe("ProductGuide entry and navigation", () => {
-  it("shows step one for a first visit without creating task data", async () => {
+describe("three-page Product Guide", () => {
+  it("has exactly three normal pages and keeps the Before/After and comparison concepts", async () => {
     await renderGuide();
+    expect(container?.textContent).toContain("1 / 3");
+    expect(container?.textContent).toContain("ก่อนจัด");
+    expect(container?.textContent).toContain("หลังจัด");
 
-    expect(currentStep(1)).toBeTruthy();
-    expect(guideRuntime.updateCalls).toBe(0);
-    expect(flowState().tasksByDay).toEqual({});
-    expect(guideRuntime.routerReplace).not.toHaveBeenCalled();
+    await click(findButton("ต่อไป"));
+    expect(container?.textContent).toContain("2 / 3");
+    expect(container?.textContent).toContain("ปฏิทินทั่วไป");
+    expect(container?.textContent).toContain("ผู้ใช้ยังเป็นคนยืนยันแผนสุดท้าย");
+
+    await click(findButton("ต่อไป"));
+    expect(container?.textContent).toContain("3 / 3");
+    expect(container?.textContent).toContain("เพิ่มสิ่งที่ต้องทำ");
+    expect(container?.textContent).toContain("ให้ Flow จัดเวลา");
+    expect(container?.textContent).toContain("เริ่มลงมือทำ");
+    expect(findButton("เริ่มวางแผนวันแรก")).toBeTruthy();
+    expect(container?.textContent).not.toContain("4 / 4");
   });
 
-  it("opens the template step from contextual Quick Start without leaving a sticky query", async () => {
+  it("starts Interactive Quick Start and routes to /app without creating sample tasks", async () => {
+    const before = JSON.stringify(runtime.flowState);
+    await renderGuide();
+    await click(findButton("ต่อไป"));
+    await click(findButton("ต่อไป"));
+    await click(findButton("เริ่มวางแผนวันแรก"));
+
+    const guidance = loadOnboardingState(window.localStorage);
+    expect(guidance.productGuide.status).toBe("completed");
+    expect(guidance.quickStart).toMatchObject({ status: "started", stage: "add_task" });
+    expect(runtime.routerReplace).toHaveBeenCalledWith("/app?quickStart=1");
+    expect(JSON.stringify(runtime.flowState)).toBe(before);
+    expect(runtime.track).not.toHaveBeenCalledWith("tour_reopened", expect.anything());
+  });
+
+  it("skips Product Guide and Quick Start without touching task state", async () => {
+    const before = JSON.stringify(runtime.flowState);
+    await renderGuide();
+    await click(findButton("ข้ามและเริ่มใช้"));
+    const guidance = loadOnboardingState(window.localStorage);
+    expect(guidance.productGuide.status).toBe("skipped");
+    expect(guidance.quickStart.status).toBe("skipped");
+    expect(runtime.routerReplace).toHaveBeenCalledWith("/app");
+    expect(JSON.stringify(runtime.flowState)).toBe(before);
+  });
+});
+
+describe("optional Sample Day routes", () => {
+  it("keeps start=templates outside Product Guide page count", async () => {
     window.history.replaceState({}, "", "/guide?start=templates");
     await renderGuide();
-
-    expect(currentStep(3)).toBeTruthy();
-    expect(loadOnboardingState(window.localStorage).status).toBe("started");
-    expect(loadOnboardingState(window.localStorage).currentStep).toBe(3);
-    expect(window.location.pathname).toBe("/guide");
-    expect(window.location.search).toBe("");
-    expect(flowState().tasksByDay).toEqual({});
+    expect(container?.textContent).toContain("ลองด้วยวันตัวอย่าง");
+    expect(container?.textContent).toContain("เลือกวันที่ใกล้กับชีวิตคุณ");
+    expect(container?.textContent).not.toContain("3 / 3");
   });
 
-  it("resumes the saved step and draft after refresh", async () => {
-    seedResumableDraft(3);
+  it("keeps start=comparison available without starting Quick Start", async () => {
+    window.history.replaceState({}, "", "/guide?start=comparison");
     await renderGuide();
-
-    expect(currentStep(3)).toBeTruthy();
-    expect(
-      container?.querySelector<HTMLInputElement>("#resume-1-title")?.value,
-    ).toBe("งานที่บันทึกไว้ในฉบับร่าง");
-    expect(container?.querySelector('[role="status"]')).toBeTruthy();
-    expect(guideRuntime.updateCalls).toBe(0);
-    expect(flowState().tasksByDay).toEqual({});
+    expect(container?.textContent).toContain("Flow ต่างจากปฏิทินอย่างไร");
+    expect(loadOnboardingState(window.localStorage).quickStart.status).toBe("not_started");
   });
 
-  it("supports back navigation and persists the previous guide step", async () => {
-    seedResumableDraft(3);
+  it("still builds and confirms a Sample Day with the offline local planner", async () => {
+    Object.defineProperty(window.navigator, "onLine", { configurable: true, value: false });
+    window.history.replaceState({}, "", "/guide?start=templates");
     await renderGuide();
-
-    await click(fixedActionButtons()[0]);
-
-    await vi.waitFor(() => expect(currentStep(2)).toBeTruthy());
-    await vi.waitFor(() =>
-      expect(loadOnboardingState(window.localStorage).currentStep).toBe(2),
-    );
-    expect(guideRuntime.routerReplace).not.toHaveBeenCalled();
-  });
-
-  it("skips to the app while preserving all task state", async () => {
-    const existing = {
-      ...flowState(),
-      tasksByDay: {
-        [PLAN_DATE]: [{
-          id: "existing-task",
-          title: "งานเดิม",
-          place: "",
-          priority: "normal" as const,
-          createdAt: "2026-07-23T00:00:00.000Z",
-          updatedAt: "2026-07-23T00:00:00.000Z",
-        }],
-      },
-    };
-    guideRuntime.flowState = existing;
-    await renderGuide();
-
-    await click(buttonInHeader());
-
-    expect(loadOnboardingState(window.localStorage).status).toBe("skipped");
-    expect(guideRuntime.routerReplace).toHaveBeenCalledWith("/app");
-    expect(flowState()).toBe(existing);
-    expect(guideRuntime.updateCalls).toBe(0);
-  });
-});
-
-describe("ProductGuide draft isolation", () => {
-  it("edits and deletes template drafts without writing tasks before confirmation", async () => {
-    await renderGuide();
-    await goToTemplateStep();
-
-    const firstTemplate = container?.querySelector<HTMLButtonElement>('[role="radio"]');
-    await click(firstTemplate);
-    await vi.waitFor(() => {
-      expect(container?.querySelectorAll("ol li").length).toBeGreaterThan(0);
-    });
-
-    const firstTitle = container?.querySelector<HTMLInputElement>("ol li input");
-    expect(firstTitle).toBeTruthy();
-    setInputValue(firstTitle!, "ฉบับร่างที่แก้ไขแล้ว");
-    await vi.waitFor(() => {
-      expect(loadOnboardingState(window.localStorage).draft?.items[0]?.title)
-        .toBe("ฉบับร่างที่แก้ไขแล้ว");
-    });
-
-    const countBeforeDelete = loadOnboardingState(window.localStorage).draft?.items.length ?? 0;
-    const firstDelete = container?.querySelector<HTMLButtonElement>("ol li button");
-    await click(firstDelete);
-    await vi.waitFor(() => {
-      expect(loadOnboardingState(window.localStorage).draft?.items).toHaveLength(countBeforeDelete - 1);
-    });
-
-    expect(guideRuntime.updateCalls).toBe(0);
-    expect(flowState().tasksByDay).toEqual({});
-    expect(window.localStorage.getItem(ONBOARDING_KEY)).toBeTruthy();
-  });
-});
-
-describe("ProductGuide local planning and confirmation", () => {
-  it("finishes offline with the local planner, then creates tasks and opens the timeline", async () => {
-    seedResumableDraft(4);
-    setOnline(false);
-    await renderGuide();
-
-    const stepFour = currentStep(4)?.closest("section") ?? currentStep(4)?.parentElement;
-    const generate = stepFour?.querySelector<HTMLButtonElement>(":scope > button.flow-inverse");
-    expect(flowState().tasksByDay).toEqual({});
-    expect(guideRuntime.updateCalls).toBe(0);
-
-    await click(generate);
-    await vi.waitFor(() => {
-      expect(stepFour?.querySelector(".mt-5")).toBeTruthy();
-      expect(container?.textContent).toContain("LOCAL");
-    });
-
-    expect(fetch).not.toHaveBeenCalled();
-    expect(flowState().tasksByDay).toEqual({});
-    expect(guideRuntime.updateCalls).toBe(0);
-
-    const planPanel = stepFour?.querySelector(".mt-5");
-    const confirm = [
-      ...(planPanel?.querySelectorAll<HTMLButtonElement>("button.flow-inverse") ?? []),
-    ].at(-1);
-    await click(confirm);
-
-    expect(guideRuntime.updateCalls).toBe(1);
-    expect(flowState().tasksByDay[PLAN_DATE]).toHaveLength(2);
-    expect(loadOnboardingState(window.localStorage).status).toBe("completed");
-    expect(guideRuntime.routerReplace).toHaveBeenCalledWith(
-      `/app?date=${PLAN_DATE}&view=timeline&onboarding=success`,
-    );
-  });
-
-  it("falls back to a local plan when the AI endpoint is unavailable", async () => {
-    seedResumableDraft(4);
-    setOnline(true);
-    vi.mocked(fetch).mockRejectedValueOnce(new TypeError("offline"));
-    await renderGuide();
-
-    const stepFour = currentStep(4)?.closest("section") ?? currentStep(4)?.parentElement;
-    const generate = stepFour?.querySelector<HTMLButtonElement>(":scope > button.flow-inverse");
-    await click(generate);
-
-    await vi.waitFor(() => expect(container?.textContent).toContain("LOCAL"));
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(guideRuntime.updateCalls).toBe(0);
-    expect(flowState().tasksByDay).toEqual({});
+    await click(findButton("วันเรียน"));
+    await click(findButton("ใช้ฉบับร่างนี้"));
+    expect(container?.textContent).toContain("สร้างแผนวันแรก");
+    await click(findButton("จัดวันแรกของฉัน"));
+    await vi.waitFor(() => expect(container?.textContent).toContain("แผนพร้อมให้ตรวจแล้ว"));
+    await click(findButton("ยืนยันแผนนี้"));
+    expect(Object.values((runtime.flowState as ReturnType<typeof createDefaultState>).tasksByDay).flat().length).toBeGreaterThan(0);
+    expect(runtime.routerReplace).toHaveBeenCalledWith(expect.stringContaining("/app?date="));
   });
 });
