@@ -24,6 +24,7 @@ function target(stage: "add-task" | "schedule-task") {
     width: 300, height: 50, toJSON: () => ({}),
   });
   document.body.append(button);
+  return button;
 }
 
 async function render(props: Partial<InteractiveQuickStartProps> = {}) {
@@ -75,15 +76,41 @@ afterEach(() => {
 
 describe("InteractiveQuickStart", () => {
   it("points at the real add target and has one primary action instead of a Next button", async () => {
-    target("add-task");
+    const addTarget = target("add-task");
     await render();
     expect(container?.textContent).toContain("เพิ่มงานแรกของคุณ");
     expect(button("เพิ่มงานแรก")).toBeTruthy();
     expect(container?.textContent).not.toContain("ถัดไป");
+    expect(addTarget.hasAttribute("inert")).toBe(false);
+    expect(addTarget.getAttribute("aria-hidden")).toBeNull();
+    expect(addTarget.getAttribute("tabindex")).toBeNull();
 
     await act(async () => button("เพิ่มงานแรก")?.click());
     expect(callbacks.onAddTask).toHaveBeenCalledOnce();
     expect(callbacks.onScheduleTask).not.toHaveBeenCalled();
+  });
+
+  it("dims only around the spotlight so the real target stays crisp and clickable", async () => {
+    const onTargetClick = vi.fn();
+    const addTarget = target("add-task");
+    addTarget.addEventListener("click", onTargetClick);
+    await render();
+
+    const overlays = container?.querySelectorAll<HTMLElement>("[data-quick-start-overlay]");
+    const highlight = container?.querySelector<HTMLElement>("[data-quick-start-highlight]");
+    expect(overlays).toHaveLength(4);
+    overlays?.forEach((overlay) => {
+      expect(overlay.className).not.toContain("backdrop-blur");
+      expect(overlay.style.filter).toBe("");
+      expect(overlay.style.opacity).toBe("");
+    });
+    expect(highlight?.className).toContain("pointer-events-none");
+    expect(highlight?.className).toContain("z-[69]");
+    expect(addTarget.style.filter).toBe("");
+    expect(addTarget.style.opacity).toBe("");
+
+    await act(async () => addTarget.click());
+    expect(onTargetClick).toHaveBeenCalledOnce();
   });
 
   it("opens the existing planner action but does not complete merely by opening it", async () => {

@@ -28,26 +28,26 @@ export function ScoreCard({ controlScore, freeTimeMin, tip, schedule, riskPoints
     <div className="rounded-2xl border-[1.5px] border-[var(--flow-ink)] p-3.5">
       <div className="flex items-end justify-between">
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-neutral-400">คะแนนคุมเวลา{planLabel ? ` · ${planLabel}` : ""}</div>
+          <div className="text-[10px] uppercase tracking-widest text-[var(--flow-text-muted)]">คะแนนคุมเวลา{planLabel ? ` · ${planLabel}` : ""}</div>
           <div className="font-grotesk text-4xl font-bold leading-none">
             {controlScore}<span className="text-base">%</span>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[10px] uppercase tracking-widest text-neutral-400">เวลาว่างนอกตาราง</div>
+          <div className="text-[10px] uppercase tracking-widest text-[var(--flow-text-muted)]">เวลาว่างนอกตาราง</div>
           <div className="text-2xl font-bold leading-none">{fmtMin(freeTimeMin)}</div>
         </div>
       </div>
-      <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-neutral-200">
-        <div className="flow-bar h-full rounded-full bg-[var(--flow-ink)]" style={{ width: `${barW}%` }} />
+      <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-[var(--flow-surface-muted)]">
+        <div className="flow-bar h-full rounded-full bg-[var(--flow-lime-dark)]" style={{ width: `${barW}%` }} />
       </div>
       {breakdown && (
         <div className="mt-2">
-          <button onClick={() => setShowWhy((v) => !v)} className="flex items-center gap-1 text-[11px] font-semibold text-neutral-500 underline decoration-dotted">
+          <button onClick={() => setShowWhy((v) => !v)} className="flex items-center gap-1 text-[11px] font-semibold text-[var(--flow-text-muted)] underline decoration-dotted">
             คะแนนคิดยังไง? <ChevronDown size={12} className={`transition-transform ${showWhy ? "rotate-180" : ""}`} />
           </button>
           {showWhy && (
-            <div className="mt-1.5 rounded-xl bg-neutral-50 p-2.5 text-[11px] leading-relaxed text-neutral-600">
+            <div className="mt-1.5 rounded-xl bg-[var(--flow-surface-elevated)] p-2.5 text-[11px] leading-relaxed text-[var(--flow-text-secondary)]">
               <div>เริ่มที่ <span className="font-grotesk">100</span> แล้วหักตามตารางจริง:</div>
               {breakdown.parts.length === 0 ? (
                 <div>วันนี้ไม่มีอะไรหัก - ตารางโปร่ง เดินทางน้อย ไม่มีจุดเสี่ยง</div>
@@ -58,7 +58,7 @@ export function ScoreCard({ controlScore, freeTimeMin, tip, schedule, riskPoints
                   </div>
                 ))
               )}
-              <div className="mt-1 border-t border-neutral-200 pt-1 text-neutral-500">
+              <div className="mt-1 border-t border-[var(--flow-border-default)] pt-1 text-[var(--flow-text-muted)]">
                 เวลาว่างนับจากช่วงตื่น <span className="font-grotesk">08:00–24:00</span> ที่ไม่มีงานและไม่ได้เดินทาง
               </div>
             </div>
@@ -67,12 +67,12 @@ export function ScoreCard({ controlScore, freeTimeMin, tip, schedule, riskPoints
       )}
       {altPlan && (
         <button onClick={altPlan.onSwitch}
-          className="flow-press mt-2 flex w-full items-center justify-between rounded-xl border border-dashed border-neutral-300 px-2.5 py-1.5 text-[11px] text-neutral-500">
+          className="flow-press mt-2 flex w-full items-center justify-between rounded-xl border border-dashed border-[var(--flow-border-default)] px-2.5 py-1.5 text-[11px] text-[var(--flow-text-muted)]">
           <span>อยากดูอีกแบบ? สลับเป็น<span className="font-semibold text-[var(--flow-ink)]">{altPlan.label}</span></span>
           <span className="font-grotesk font-semibold">{altPlan.score}% ↗</span>
         </button>
       )}
-      <div className="mt-2 flex items-start gap-1.5 text-xs text-neutral-600"><Lightbulb size={14} className="mt-0.5 shrink-0 text-[var(--flow-ink)]" /><span>{tip}</span></div>
+      <div className="mt-2 flex items-start gap-1.5 text-xs text-[var(--flow-text-secondary)]"><Lightbulb size={14} className="mt-0.5 shrink-0 text-[var(--flow-ink)]" /><span>{tip}</span></div>
     </div>
   );
 }

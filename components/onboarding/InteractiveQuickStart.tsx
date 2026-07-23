@@ -60,6 +60,7 @@ export function InteractiveQuickStart({
   const descriptionId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const actionTriggeredRef = useRef(false);
   const successNotifiedRef = useRef(false);
   const [targetBox, setTargetBox] = useState<TargetBox | null>(null);
   const stage = state.stage === "schedule_task" ? "schedule_task" : "add_task";
@@ -82,9 +83,6 @@ export function InteractiveQuickStart({
     }
 
     let target: Element | null = null;
-    let originalAriaHidden: string | null = null;
-    let originalTabIndex: string | null = null;
-    let originallyInert = false;
     let resizeObserver: ResizeObserver | null = null;
     let frame = 0;
     const update = () => {
@@ -94,24 +92,10 @@ export function InteractiveQuickStart({
     const connect = () => {
       const next = document.querySelector(content.selector);
       if (!next || next === target) return;
-      if (target instanceof HTMLElement) {
-        if (originalAriaHidden == null) target.removeAttribute("aria-hidden");
-        else target.setAttribute("aria-hidden", originalAriaHidden);
-        if (originalTabIndex == null) target.removeAttribute("tabindex");
-        else target.setAttribute("tabindex", originalTabIndex);
-        if (!originallyInert) target.removeAttribute("inert");
-      }
       resizeObserver?.disconnect();
       target = next;
       returnFocusRef.current = next instanceof HTMLElement ? next : null;
-      if (next instanceof HTMLElement) {
-        originalAriaHidden = next.getAttribute("aria-hidden");
-        originalTabIndex = next.getAttribute("tabindex");
-        originallyInert = next.hasAttribute("inert");
-        next.setAttribute("aria-hidden", "true");
-        next.setAttribute("tabindex", "-1");
-        next.setAttribute("inert", "");
-      }
+      actionTriggeredRef.current = false;
       resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
       resizeObserver?.observe(next);
       update();
@@ -128,14 +112,7 @@ export function InteractiveQuickStart({
       resizeObserver?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
-      if (target instanceof HTMLElement) {
-        if (originalAriaHidden == null) target.removeAttribute("aria-hidden");
-        else target.setAttribute("aria-hidden", originalAriaHidden);
-        if (originalTabIndex == null) target.removeAttribute("tabindex");
-        else target.setAttribute("tabindex", originalTabIndex);
-        if (!originallyInert) target.removeAttribute("inert");
-      }
-      returnFocusRef.current?.focus({ preventScroll: true });
+      if (!actionTriggeredRef.current) returnFocusRef.current?.focus({ preventScroll: true });
     };
   }, [coachmarkVisible, content.selector]);
 
@@ -189,41 +166,62 @@ export function InteractiveQuickStart({
 
   if (!coachmarkVisible || !targetBox) return null;
 
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 560;
-  const popoverTop = targetBox.top + targetBox.height + 14;
-  const showAbove = !isMobile && popoverTop + 230 > window.innerHeight;
-  const popoverStyle = isMobile
-    ? undefined
-    : {
-        top: showAbove ? Math.max(12, targetBox.top - 220) : popoverTop,
-        left: Math.min(
-          Math.max(12, targetBox.left + targetBox.width / 2 - 180),
-          window.innerWidth - 372,
-        ),
-      };
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const spotlightPadding = 6;
+  const cutoutTop = Math.max(0, targetBox.top - spotlightPadding);
+  const cutoutLeft = Math.max(0, targetBox.left - spotlightPadding);
+  const cutoutRight = Math.min(viewportWidth, targetBox.left + targetBox.width + spotlightPadding);
+  const cutoutBottom = Math.min(viewportHeight, targetBox.top + targetBox.height + spotlightPadding);
+  const cutoutHeight = Math.max(0, cutoutBottom - cutoutTop);
+  const estimatedPopoverHeight = 250;
+  const belowTarget = cutoutBottom + 14;
+  const aboveTarget = cutoutTop - estimatedPopoverHeight - 14;
+  const popoverTop = belowTarget + estimatedPopoverHeight <= viewportHeight - 12
+    ? belowTarget
+    : aboveTarget >= 12
+      ? aboveTarget
+      : Math.max(12, Math.min(belowTarget, viewportHeight - estimatedPopoverHeight - 12));
+  const popoverStyle = {
+    top: popoverTop,
+    left: Math.min(
+      Math.max(12, targetBox.left + targetBox.width / 2 - 180),
+      Math.max(12, viewportWidth - 372),
+    ),
+  };
+  const triggerPrimaryAction = () => {
+    actionTriggeredRef.current = true;
+    if (stage === "add_task") onAddTask();
+    else onScheduleTask();
+  };
 
   return (
     <>
-      <div className="fixed inset-0 z-[68] bg-black/55 backdrop-blur-[1px]" aria-hidden />
+      <div data-quick-start-overlay="top" className="fixed left-0 right-0 top-0 z-[68] bg-[var(--flow-overlay-background)]" style={{ height: cutoutTop }} aria-hidden />
+      <div data-quick-start-overlay="bottom" className="fixed bottom-0 left-0 right-0 z-[68] bg-[var(--flow-overlay-background)]" style={{ top: cutoutBottom }} aria-hidden />
+      <div data-quick-start-overlay="left" className="fixed left-0 z-[68] bg-[var(--flow-overlay-background)]" style={{ top: cutoutTop, width: cutoutLeft, height: cutoutHeight }} aria-hidden />
+      <div data-quick-start-overlay="right" className="fixed right-0 z-[68] bg-[var(--flow-overlay-background)]" style={{ top: cutoutTop, left: cutoutRight, height: cutoutHeight }} aria-hidden />
       <div
+        data-quick-start-highlight
         aria-hidden
-        className="pointer-events-none fixed z-[69] rounded-2xl border-[3px] border-[var(--flow-lime)] shadow-[0_0_0_5px_rgba(255,255,255,.95)] motion-reduce:transition-none"
+        className="pointer-events-none fixed z-[69] rounded-2xl border-[3px] border-[var(--flow-lime)] motion-reduce:transition-none"
         style={{
-          top: Math.max(4, targetBox.top - 5),
-          left: Math.max(4, targetBox.left - 5),
-          width: targetBox.width + 10,
-          height: targetBox.height + 10,
+          top: cutoutTop,
+          left: cutoutLeft,
+          width: Math.max(0, cutoutRight - cutoutLeft),
+          height: cutoutHeight,
+          boxShadow: "0 0 0 3px var(--flow-surface-page), 0 0 0 6px var(--flow-accent)",
         }}
       />
       <div
         ref={dialogRef}
         role="dialog"
-        aria-modal="true"
+        aria-modal="false"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         tabIndex={-1}
         style={popoverStyle}
-        className={`fixed z-[70] w-[min(360px,calc(100vw-24px))] rounded-[22px] border-[1.5px] border-[var(--flow-ink)] bg-[var(--flow-paper)] p-4 text-[var(--flow-ink)] shadow-[var(--flow-shadow)] outline-none ${isMobile ? "inset-x-3 bottom-[max(.75rem,env(safe-area-inset-bottom))]" : ""}`}
+        className="fixed z-[70] max-h-[calc(100dvh-24px)] w-[min(360px,calc(100vw-24px))] overflow-y-auto rounded-[22px] border-[1.5px] border-[var(--flow-border-strong)] bg-[var(--flow-surface-card)] p-4 text-[var(--flow-text-primary)] shadow-[var(--flow-shadow)] outline-none"
       >
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[var(--flow-lime)] text-[#111111]"><Sparkles aria-hidden size={19} /></span>
@@ -233,7 +231,7 @@ export function InteractiveQuickStart({
           </div>
           <button type="button" onClick={onSkip} aria-label="ข้ามการแนะนำ" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"><X aria-hidden size={18} /></button>
         </div>
-        <button type="button" onClick={stage === "add_task" ? onAddTask : onScheduleTask} className="flow-press flow-inverse mt-4 min-h-12 w-full rounded-xl px-4 font-semibold">{content.action}</button>
+        <button type="button" onClick={triggerPrimaryAction} className="flow-press flow-inverse mt-4 min-h-12 w-full rounded-xl px-4 font-semibold">{content.action}</button>
         <button type="button" onClick={onSkip} className="mt-1 min-h-11 w-full rounded-xl px-3 text-sm font-semibold text-[var(--flow-muted)] underline decoration-[var(--flow-lime-dark)] underline-offset-4">ข้ามการแนะนำ</button>
       </div>
     </>

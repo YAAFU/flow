@@ -105,6 +105,22 @@ afterEach(() => {
 });
 
 describe("AIPlannerDialog", () => {
+  it("uses semantic planner surfaces for light and dark themes", () => {
+    act(() => {
+      root?.render(<AIPlannerDialog selectedDate="2026-07-21" currentTasks={[]} onClose={vi.fn()} onParse={vi.fn()} onGeneratePlan={vi.fn()} onAppendDrafts={vi.fn()} onApplyPlan={vi.fn()} />);
+    });
+
+    const scope = container?.querySelector<HTMLElement>("[data-theme-scope='ai-planner']");
+    const status = container?.querySelector<HTMLElement>("[data-testid='planner-system-status']");
+    expect(scope?.className).toContain("flow-planner-dialog");
+    expect(status?.className).toContain("flow-planner-status");
+    expect(status?.className).not.toContain("bg-[var(--flow-ink)]");
+    expect(status?.className).not.toContain("text-white");
+    expect(container?.querySelector("#planner-request")?.className).not.toContain("text-white");
+    expect(container?.querySelector("#planner-date")?.getAttribute("type")).toBe("date");
+    expect(container?.querySelector("#planner-start")?.getAttribute("type")).toBe("time");
+  });
+
   it("flags a backwards daytime schedule instead of silently wrapping it to tomorrow", () => {
     const conflicts = findScheduleArrivalConflicts([
       { taskId: "later", title: "งานสาย", placeLabel: "", start: "10:00", end: "10:30", travelFromPrevMin: 0 },

@@ -406,16 +406,16 @@ export function AIPlannerDialog({
   return (
     <>
       <FlowDialog title="ให้ AI จัดวันให้" description="ตั้งค่าวัน จุดเริ่มต้น ระดับพลังงาน และตรวจแผนก่อนบันทึก" onClose={closeWithoutSaving}>
-        <div className="space-y-4">
-          <section className="rounded-2xl bg-[var(--flow-ink)] p-4 text-white" aria-label="สถานะระบบวางแผน">
+        <div className="flow-planner-dialog space-y-4" data-theme-scope="ai-planner">
+          <section className="flow-planner-status rounded-2xl p-4" aria-label="สถานะระบบวางแผน" data-testid="planner-system-status">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm font-semibold"><Sparkles size={17} className="text-[var(--flow-lime)]" aria-hidden />วางทั้งงาน เวลา และช่วงพัก</div>
-                <p className="mt-1 text-xs leading-5 text-neutral-300">ตรวจและแก้ฉบับร่างได้ก่อนบันทึก งานเดิมที่ไม่อยู่ในแผนจะไม่ถูกลบ</p>
+                <p className="flow-planner-status-secondary mt-1 text-xs leading-5">ตรวจและแก้ฉบับร่างได้ก่อนบันทึก งานเดิมที่ไม่อยู่ในแผนจะไม่ถูกลบ</p>
               </div>
-              <span className="font-grotesk shrink-0 rounded-full bg-[var(--flow-lime)] px-2.5 py-1 text-[10px] font-bold text-[#111111]" aria-label={`กำลังใช้ ${modeLabel(mode)}`}>{modeLabel(mode)}</span>
+              <span className="font-grotesk shrink-0 rounded-full bg-[var(--flow-accent)] px-2.5 py-1 text-[10px] font-bold text-[var(--flow-accent-foreground)]" aria-label={`กำลังใช้ ${modeLabel(mode)}`}>{modeLabel(mode)}</span>
             </div>
-            <p className="mt-3 border-t border-white/20 pt-3 text-[11px] leading-5 text-neutral-300">
+            <p className="flow-planner-status-secondary mt-3 border-t border-[var(--flow-border-default)] pt-3 text-[11px] leading-5">
               {mode === "ai" ? "AI ช่วยตีความและจัดตาราง โปรดตรวจผลลัพธ์ก่อนใช้จริง" : "โหมด Local จัดแผนในเครื่องแบบ deterministic เมื่อไม่มี AI API"}
             </p>
           </section>
@@ -477,7 +477,7 @@ export function AIPlannerDialog({
           </form>
 
           {(error || notice) && (
-            <div id={errorId} role={error ? "alert" : "status"} aria-live="polite" className={`rounded-xl border-[1.5px] px-3 py-2.5 text-sm ${error ? "border-red-700 bg-red-50 text-red-800" : "border-[var(--flow-line)] bg-[var(--flow-lime)] text-[#111111]"}`}>
+            <div id={errorId} role={error ? "alert" : "status"} aria-live="polite" className={`rounded-xl border-[1.5px] px-3 py-2.5 text-sm ${error ? "flow-danger-panel" : "border-[var(--flow-border-strong)] bg-[var(--flow-accent)] text-[var(--flow-accent-foreground)]"}`}>
               {error || notice}
             </div>
           )}
@@ -547,7 +547,7 @@ export function AIPlannerDialog({
                         onChange={(location) => updateDraft(draft.draftId, taskLocationToFlat(location))}
                       />
                     </div>
-                    {draft.needsReview && <p className="mt-2 flex items-start gap-1.5 text-xs text-amber-800"><AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />ข้อมูลเวลายังไม่ครบ กรุณาตรวจสอบก่อนยืนยัน</p>}
+                    {draft.needsReview && <p className="flow-warning-panel mt-2 flex items-start gap-1.5 rounded-lg px-2 py-1.5 text-xs"><AlertTriangle size={14} className="mt-0.5 shrink-0" aria-hidden />ข้อมูลเวลายังไม่ครบ กรุณาตรวจสอบก่อนยืนยัน</p>}
                   </li>
                 ))}
               </ol>
@@ -555,7 +555,7 @@ export function AIPlannerDialog({
 
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <button type="button" onClick={appendDrafts} disabled={disabled || drafts.length === 0} className="flow-press min-h-12 rounded-2xl border-[1.5px] border-[var(--flow-line)] px-3 text-sm font-semibold disabled:opacity-40">{busy === "append" ? "กำลังบันทึก" : "บันทึกเฉพาะงานใหม่"}</button>
-              <button type="button" onClick={generatePlan} disabled={disabled || (!targetTasks.length && !drafts.length)} className="flow-press min-h-12 rounded-2xl bg-[var(--flow-lime)] px-3 text-sm font-semibold text-[#111111] disabled:opacity-40">{busy === "plan" ? "กำลังจัดแผน" : "ให้ AI จัดวันให้"}</button>
+              <button type="button" onClick={generatePlan} disabled={disabled || (!targetTasks.length && !drafts.length)} className="flow-press min-h-12 rounded-2xl bg-[var(--flow-accent)] px-3 text-sm font-semibold text-[var(--flow-accent-foreground)] disabled:opacity-40">{busy === "plan" ? "กำลังจัดแผน" : "ให้ AI จัดวันให้"}</button>
             </div>
           </section>
 
@@ -567,7 +567,7 @@ export function AIPlannerDialog({
               </div>
 
               <div className="mt-3 grid grid-cols-2 rounded-xl border-[1.5px] border-[var(--flow-line)] p-1" role="tablist" aria-label="เลือกฉบับแผน">
-                {(["A", "B"] as const).map((name) => <button key={name} type="button" role="tab" aria-selected={variantName === name} onClick={() => { setVariantName(name); setRiskAccepted(false); }} className={`flow-press min-h-11 rounded-lg text-sm font-semibold ${variantName === name ? "bg-[var(--flow-ink)] text-white" : "text-[var(--flow-muted)]"}`}>แผน {name}</button>)}
+                {(["A", "B"] as const).map((name) => <button key={name} type="button" role="tab" aria-selected={variantName === name} onClick={() => { setVariantName(name); setRiskAccepted(false); }} className={`flow-press min-h-11 rounded-lg text-sm font-semibold ${variantName === name ? "flow-inverse" : "text-[var(--flow-muted)]"}`}>แผน {name}</button>)}
               </div>
 
               <div className="mt-3 space-y-2 rounded-xl bg-[var(--flow-surface)] p-3 text-xs leading-5 text-[var(--flow-muted)]">
@@ -613,8 +613,8 @@ export function AIPlannerDialog({
               <div className="mt-4"><Timeline items={activeVariant.schedule} riskPoints={activeVariant.riskPoints} /></div>
 
               {requiresRiskAcceptance && (
-                <label className="mt-3 flex min-h-12 cursor-pointer items-start gap-2 rounded-xl border-[1.5px] border-red-700 bg-red-50 p-3 text-sm text-red-900">
-                  <input type="checkbox" checked={riskAccepted} onChange={(event) => setRiskAccepted(event.target.checked)} className="mt-0.5 h-5 w-5 accent-[#111111]" />
+                <label className="flow-danger-panel mt-3 flex min-h-12 cursor-pointer items-start gap-2 rounded-xl border-[1.5px] p-3 text-sm">
+                  <input type="checkbox" checked={riskAccepted} onChange={(event) => setRiskAccepted(event.target.checked)} className="mt-0.5 h-5 w-5 accent-[var(--flow-lime-dark)]" />
                   <span><strong>พบความเสี่ยงที่ต้องยืนยัน</strong><br /><span className="text-xs">เวลาทับกัน {activeOverlaps.length} จุด · ลำดับ/ช่วงเวลาไม่ถูกต้อง {activeChronologyConflicts.length} จุด · เดินทางไม่ทัน {activeTravelConflicts.length} ช่วง ฉันตรวจสอบแล้วและต้องการบันทึกแผนนี้</span></span>
                 </label>
               )}

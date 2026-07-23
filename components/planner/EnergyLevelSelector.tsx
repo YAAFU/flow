@@ -77,7 +77,7 @@ export function EnergyLevelSelector({
           return (
             <label
               key={optionValue}
-              className={`flow-press flex min-h-12 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-2 text-sm focus-within:outline-none focus-within:ring-2 focus-within:ring-[var(--flow-lime-dark)] focus-within:ring-offset-2 ${selected ? "border-[var(--flow-lime-dark)] bg-[var(--flow-lime)] font-bold text-[#111111]" : "border-[var(--flow-line)]"} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+              className={`flow-press flex min-h-12 cursor-pointer items-center justify-center gap-1.5 rounded-xl border px-2 text-sm focus-within:outline-none focus-within:ring-2 focus-within:ring-[var(--flow-lime-dark)] focus-within:ring-offset-2 ${selected ? "border-[var(--flow-lime-dark)] bg-[var(--flow-accent)] font-bold text-[var(--flow-accent-foreground)]" : "border-[var(--flow-line)]"} ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
             >
               <input
                 ref={(node) => { optionRefs.current[index] = node; }}

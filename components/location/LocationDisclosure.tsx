@@ -259,7 +259,7 @@ export function LocationDisclosure({
                   disabled={disabled}
                   key={`${location.name}-${location.latitude ?? "name"}-${location.longitude ?? "only"}`}
                   onClick={() => select(location)}
-                  className={`flex min-h-9 items-center gap-1 rounded-full border px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-[var(--flow-lime-dark)] disabled:opacity-50 ${selected ? "border-[var(--flow-ink)] bg-[var(--flow-ink)] text-white" : "border-[var(--flow-line)] text-[var(--flow-muted)]"}`}
+                  className={`flex min-h-9 items-center gap-1 rounded-full border px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-[var(--flow-lime-dark)] disabled:opacity-50 ${selected ? "flow-inverse border-[var(--flow-inverse)]" : "border-[var(--flow-line)] text-[var(--flow-muted)]"}`}
                 >
                   {selected && <Check aria-hidden size={12} />}{location.name}
                 </button>

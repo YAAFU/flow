@@ -68,4 +68,17 @@ describe("TaskListView first-use state", () => {
     expect(button("เพิ่มงานแรก")).toBeUndefined();
     expect(container?.querySelectorAll("[data-tour='primary-action']")).toHaveLength(0);
   });
+
+  it("shows tasks from every category and preserves their category labels", () => {
+    const categories = createDefaultState().categories;
+    render([
+      createTask({ title: "อ่านหนังสือ", categoryId: categories[0].id }, 0),
+      createTask({ title: "ออกกำลังกาย", categoryId: categories.at(-1)?.id }, 1),
+    ]);
+
+    expect(container?.textContent).toContain("อ่านหนังสือ");
+    expect(container?.textContent).toContain("ออกกำลังกาย");
+    expect(container?.textContent).toContain(categories[0].name);
+    expect(container?.textContent).toContain(categories.at(-1)?.name);
+  });
 });
