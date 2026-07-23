@@ -59,6 +59,30 @@ describe("product analytics privacy boundary", () => {
     })).toEqual({ plannerMode: "local" });
   });
 
+  it("keeps only aggregate parser metadata and removes the original text", () => {
+    expect(sanitizeProductEventMetadata("bulk_text_parse_succeeded", {
+      itemCount: 5,
+      parserMode: "local",
+      hasAmbiguousItems: true,
+      hasLocation: true,
+      hasFixedTimes: true,
+      requiredPlanner: true,
+      success: true,
+      text: "พรุ่งนี้ประชุมลับ",
+      title: "ประชุมลับ",
+      place: "บ้าน",
+      latitude: 13.7,
+    })).toEqual({
+      itemCount: 5,
+      parserMode: "local",
+      hasAmbiguousItems: true,
+      hasLocation: true,
+      hasFixedTimes: true,
+      requiredPlanner: true,
+      success: true,
+    });
+  });
+
   it("sends a frozen, sanitized event to an injected provider", () => {
     const events: ProductAnalyticsEvent[] = [];
     configureProductAnalytics({

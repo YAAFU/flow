@@ -42,7 +42,8 @@ const SYSTEM = `คุณคือ Flow ผู้ช่วยวางแผน�
 - title, place (อาจเป็นต่างจังหวัด), priority (urgent/high/normal/flex), deadlineDate/deadlineTime, allDay, categoryId และ reminderOffsets
 - fixedTime: ถ้ามี = ผู้ใช้อยากเริ่มประมาณเวลานี้; ถ้าไม่มี = คุณหาเวลาที่เหมาะให้เอง
 - lockTime: ถ้า true = ห้ามเลื่อนเวลานี้เด็ดขาด (anchor)
-- durationMin: ถ้ามี = ใช้เวลาเท่านี้; ถ้าไม่มี = ประเมินเองตามชนิดงานให้สมจริง (เช่น ตื่นนอน/เตรียมตัว ~30-45น, ประชุม ~60น, กินข้าว ~45น, รับน้อง/กิจกรรม ~60น)
+- durationMin: ถ้ามี = ใช้เวลาเท่านี้; ถ้าไม่มี = ห้ามสร้างเวลาเทียมหรือใส่งานนั้นใน schedule ให้คงเป็นงานรอประเมิน
+- timeWindow: ถ้ามี = จัดภายในช่วง start/end นี้ ถ้าทำไม่ได้ต้องแจ้งใน riskPoints ห้ามขยับออกนอกช่วงเงียบ ๆ
 
 กฎการจัดเวลา:
 1. งานที่ lockTime=true หรือ priority=urgent/high ที่มี fixedTime → เป็น anchor ตรึงเวลาไว้ ห้ามเลื่อน

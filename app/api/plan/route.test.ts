@@ -26,14 +26,15 @@ describe("plan contract", () => {
     const out = extractJson('นี่คือแผน: {"controlScore":78} ครับ');
     expect((out as { controlScore: number }).controlScore).toBe(78);
   });
-  it("local fallback matches schema and preserves the request task", () => {
+  it("local fallback keeps an unknown-duration task unscheduled instead of inventing 60 minutes", () => {
     const plan = buildLocalPlan([{ id: "request-task", title: "งานจริง", place: "", priority: "normal" }]);
     expect(() => PlanResultSchema.parse(plan)).not.toThrow();
     expect(plan.mode).toBe("local");
-    expect(plan.plans.B.schedule.map((item) => item.taskId)).toEqual(["request-task"]);
+    expect(plan.plans.B.schedule).toEqual([]);
+    expect(plan.plans.B.riskPoints.some((risk) => risk.reason.includes("ยังไม่มีระยะเวลา"))).toBe(true);
   });
 
-  it("returns a transparent local response when the API key is absent", async () => {
+  it("returns a transparent local response without fabricating time when the API key is absent", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
     const request = new NextRequest("http://localhost/api/plan", {
       method: "POST",
@@ -48,7 +49,8 @@ describe("plan contract", () => {
     const json = PlanResultSchema.parse(await response.json());
     expect(response.status).toBe(200);
     expect(json.mode).toBe("local");
-    expect(json.plans.B.schedule.map((entry) => entry.taskId)).toEqual(["only-real-task"]);
+    expect(json.plans.B.schedule).toEqual([]);
+    expect(json.plans.B.riskPoints.some((risk) => risk.reason.includes("ยังไม่มีระยะเวลา"))).toBe(true);
   });
 
   it("accepts the structured planning context and uses its energy and origin in local fallback", async () => {

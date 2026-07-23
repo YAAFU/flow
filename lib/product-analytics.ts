@@ -20,6 +20,14 @@ export const PRODUCT_EVENT_NAMES = [
   "quick_start_plan_applied",
   "quick_start_completed",
   "quick_start_skipped",
+  "bulk_text_parser_opened",
+  "bulk_text_parse_started",
+  "bulk_text_parse_succeeded",
+  "bulk_text_parse_failed",
+  "bulk_text_preview_edited",
+  "bulk_text_tasks_confirmed",
+  "bulk_text_tasks_created",
+  "bulk_text_planner_used",
 ] as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
@@ -64,6 +72,13 @@ export type ProductEventMetadata = {
   plannerMode?: (typeof ANALYTICS_PLANNER_MODES)[number];
   completionStatus?: (typeof ANALYTICS_COMPLETION_STATUSES)[number];
   durationBucket?: (typeof ANALYTICS_DURATION_BUCKETS)[number];
+  itemCount?: number;
+  parserMode?: (typeof ANALYTICS_PLANNER_MODES)[number];
+  hasAmbiguousItems?: boolean;
+  hasLocation?: boolean;
+  hasFixedTimes?: boolean;
+  requiredPlanner?: boolean;
+  success?: boolean;
 };
 
 export type SanitizedProductEventMetadata = Readonly<ProductEventMetadata>;
@@ -101,6 +116,14 @@ const EVENT_METADATA_KEYS: Record<ProductEventName, readonly MetadataKey[]> = {
   quick_start_plan_applied: ["plannerMode"],
   quick_start_completed: ["completionStatus"],
   quick_start_skipped: ["entryPoint"],
+  bulk_text_parser_opened: [],
+  bulk_text_parse_started: [],
+  bulk_text_parse_succeeded: ["itemCount", "parserMode", "hasAmbiguousItems", "hasLocation", "hasFixedTimes", "requiredPlanner", "success"],
+  bulk_text_parse_failed: ["success"],
+  bulk_text_preview_edited: [],
+  bulk_text_tasks_confirmed: ["itemCount", "parserMode", "requiredPlanner", "success"],
+  bulk_text_tasks_created: ["itemCount", "parserMode", "requiredPlanner", "success"],
+  bulk_text_planner_used: ["itemCount", "parserMode", "success"],
 };
 
 const ENTRY_POINTS = new Set<string>(ANALYTICS_ENTRY_POINTS);
@@ -139,6 +162,18 @@ function sanitizeValue(key: MetadataKey, value: unknown): ProductEventMetadata[M
       return typeof value === "string" && DURATION_BUCKETS.has(value)
         ? value as ProductEventMetadata["durationBucket"]
         : undefined;
+    case "itemCount":
+      return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 20 ? value : undefined;
+    case "parserMode":
+      return typeof value === "string" && PLANNER_MODES.has(value)
+        ? value as ProductEventMetadata["parserMode"]
+        : undefined;
+    case "hasAmbiguousItems":
+    case "hasLocation":
+    case "hasFixedTimes":
+    case "requiredPlanner":
+    case "success":
+      return typeof value === "boolean" ? value : undefined;
   }
 }
 

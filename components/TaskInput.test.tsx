@@ -79,6 +79,17 @@ afterEach(() => {
 });
 
 describe("TaskInput", () => {
+  it("reuses the existing multi-task entry point without submitting a placeholder task", async () => {
+    const onAdd = successfulSubmitMock();
+    const onOpenBulk = vi.fn();
+    renderTaskInput({ onAdd, onOpenBulk });
+
+    await click(button("พิมพ์ทีเดียวหลายงาน"));
+
+    expect(onOpenBulk).toHaveBeenCalledTimes(1);
+    expect(onAdd).not.toHaveBeenCalled();
+  });
+
   it("starts with one required, visibly labelled title field and hides optional details", () => {
     renderTaskInput();
 

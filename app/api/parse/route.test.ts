@@ -22,7 +22,8 @@ describe("parse route local fallback", () => {
     const json = ParsedTasksResponseSchema.parse(await response.json());
     expect(response.status).toBe(200);
     expect(json.mode).toBe("local");
-    expect(json.tasks[0]).toMatchObject({ fixedTime: "10:00", deadlineDate: "2026-07-22" });
+    expect(json.tasks[0]).toMatchObject({ fixedTime: "10:00", date: "2026-07-22" });
+    expect(json.tasks[0].deadlineDate).toBeUndefined();
     expect(json.tasks[0].deadlineTime).toBeUndefined();
   });
 

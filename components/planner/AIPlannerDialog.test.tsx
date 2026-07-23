@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AIPlannerDialog, findScheduleArrivalConflicts, type PlannerApplyInput } from "@/components/planner/AIPlannerDialog";
+import { AIPlannerDialog, findDraftScheduleConflicts, findScheduleArrivalConflicts, type PlannerApplyInput } from "@/components/planner/AIPlannerDialog";
 import type { ParsedTasksResponse } from "@/lib/ai-parse";
 import type { PlanResult, Task } from "@/lib/types";
 
@@ -11,6 +11,26 @@ let container: HTMLDivElement | undefined;
 const targetTask: Task = { id: "target-task", title: "ประชุมทีม", place: "ออฟฟิศ", priority: "high", fixedTime: "10:00", durationMin: 60, lockTime: true };
 const beforeTask: Task = { id: "before-task", title: "งานก่อนหน้า", place: "", priority: "normal", durationMin: 30 };
 const afterTask: Task = { id: "after-task", title: "งานถัดไป", place: "", priority: "normal", durationMin: 30 };
+
+it("detects a fixed-time draft collision before batch confirmation", () => {
+  const conflicts = findDraftScheduleConflicts([{
+    draftId: "draft-collision",
+    title: "ดูหนัง",
+    date: "2026-07-21",
+    place: "",
+    fixedTime: "10:30",
+    durationMin: 60,
+    durationSource: "explicit",
+    lockTime: true,
+    allDay: false,
+    priority: "normal",
+    reminderOffsets: [],
+    repeat: "none",
+    needsReview: false,
+    note: "",
+  }], () => [targetTask]);
+  expect(conflicts).toEqual(["ดูหนัง ทับกับ ประชุมทีม"]);
+});
 
 const parsed: ParsedTasksResponse = {
   mode: "local",
@@ -165,7 +185,7 @@ describe("AIPlannerDialog", () => {
     expect(high?.checked).toBe(true);
     expect(onEnergyChange).toHaveBeenCalledWith("2026-07-21", "high");
 
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
     expect(onGeneratePlan).toHaveBeenCalledWith(expect.objectContaining({ energyLevel: "high" }));
   });
 
@@ -191,7 +211,7 @@ describe("AIPlannerDialog", () => {
       root?.render(<AIPlannerDialog selectedDate="2026-07-21" currentTasks={[targetTask]} onClose={vi.fn()} onParse={vi.fn()} onGeneratePlan={onGeneratePlan} onAppendDrafts={vi.fn()} onApplyPlan={vi.fn()} />);
     });
 
-    const generate = button("ให้ AI จัดวันให้");
+    const generate = button("จัดเวลาและเพิ่ม");
     expect(generate?.disabled).toBe(false);
     await click(generate);
     expect(onGeneratePlan).toHaveBeenCalledWith(expect.objectContaining({ startLocation: undefined }));
@@ -210,7 +230,7 @@ describe("AIPlannerDialog", () => {
       });
 
       await click(button("ใช้ตำแหน่งปัจจุบัน"));
-      expect(button("ให้ AI จัดวันให้")?.disabled).toBe(true);
+      expect(button("จัดเวลาและเพิ่ม")?.disabled).toBe(true);
       expect(onGeneratePlan).not.toHaveBeenCalled();
     } finally {
       if (originalGeolocation) Object.defineProperty(navigator, "geolocation", originalGeolocation);
@@ -235,7 +255,7 @@ describe("AIPlannerDialog", () => {
     expect(container?.querySelector<HTMLInputElement>('input[value="เขียนรายงาน"]')).toBeTruthy();
     expect(onAppendDrafts).not.toHaveBeenCalled();
 
-    await click(button("บันทึกเฉพาะงานใหม่"));
+    await click(button("เพิ่ม 1 งานลง Timeline"));
     expect(onAppendDrafts).toHaveBeenCalledWith(expect.objectContaining({ targetDate: "2026-07-21", drafts: [expect.objectContaining({ title: "เขียนรายงาน" })] }));
   });
 
@@ -253,7 +273,7 @@ describe("AIPlannerDialog", () => {
     await click(disclosure);
     const siam = [...(draftItem?.querySelectorAll("button") ?? [])].find((item) => item.textContent?.trim() === "สยาม") as HTMLButtonElement | undefined;
     await click(siam);
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
 
     expect(onGeneratePlan).toHaveBeenCalledWith(expect.objectContaining({
       drafts: [expect.objectContaining({
@@ -278,7 +298,7 @@ describe("AIPlannerDialog", () => {
     expect(onTargetDateChange).toHaveBeenCalledWith("2026-07-23");
     expect(container?.textContent).toContain("งานเดิม 1 รายการ");
 
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
     expect(onGeneratePlan).toHaveBeenCalledWith(expect.objectContaining({ targetDate: "2026-07-23", currentTasks: [targetTask], drafts: [] }));
     expect(container?.textContent).toContain("ตรวจแผนก่อนบันทึก");
     expect(container?.textContent).toContain("แผน A");
@@ -292,7 +312,7 @@ describe("AIPlannerDialog", () => {
       root?.render(<AIPlannerDialog selectedDate="2026-07-21" currentTasks={previewTasks} onClose={vi.fn()} onParse={vi.fn()} onGeneratePlan={onGeneratePlan} onAppendDrafts={vi.fn()} onApplyPlan={vi.fn()} />);
     });
 
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
 
     expect(container?.querySelector<HTMLInputElement>("#plan-A-1-start")?.disabled).toBe(true);
     expect(container?.querySelector<HTMLInputElement>("#plan-A-1-duration")?.disabled).toBe(true);
@@ -313,7 +333,7 @@ describe("AIPlannerDialog", () => {
         },
       }))} onAppendDrafts={vi.fn()} onApplyPlan={vi.fn()} />);
     });
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
 
     const start = container?.querySelector<HTMLInputElement>("#plan-A-0-start");
     const duration = container?.querySelector<HTMLInputElement>("#plan-A-0-duration");
@@ -335,7 +355,7 @@ describe("AIPlannerDialog", () => {
         },
       }))} onAppendDrafts={vi.fn()} onApplyPlan={onApplyPlan} />);
     });
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
     await click(buttonWithLabel("ลบ งานก่อนหน้า จากแผน"));
     await click(button("ใช้แผน A นี้"));
 
@@ -360,7 +380,7 @@ describe("AIPlannerDialog", () => {
       root?.render(<AIPlannerDialog selectedDate="2026-07-21" currentTasks={[targetTask, completedTask]} onClose={vi.fn()} onParse={vi.fn()} onGeneratePlan={vi.fn(async () => plan)} onAppendDrafts={vi.fn()} onApplyPlan={onApplyPlan} />);
     });
 
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
     await click(button("ใช้แผน A นี้"));
 
     expect(onApplyPlan).toHaveBeenCalledWith(expect.objectContaining({
@@ -382,7 +402,7 @@ describe("AIPlannerDialog", () => {
     act(() => {
       root?.render(<AIPlannerDialog selectedDate="2026-07-21" currentTasks={[beforeTask]} onClose={vi.fn()} onParse={vi.fn()} onGeneratePlan={vi.fn(async () => conflictPlan)} onAppendDrafts={vi.fn()} onApplyPlan={onApplyPlan} />);
     });
-    await click(button("ให้ AI จัดวันให้"));
+    await click(button("จัดเวลาและเพิ่ม"));
     const apply = button("ใช้แผน A นี้");
     expect(apply?.disabled).toBe(true);
     const acknowledgement = container?.querySelector<HTMLInputElement>('input[type="checkbox"]');

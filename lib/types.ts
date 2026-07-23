@@ -7,6 +7,11 @@ export const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 export const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 
 export const LocationSourceSchema = z.enum(["search", "quick", "map", "live", "manual"]);
+export const TaskTimeWindowSchema = z.object({
+  start: TimeSchema.optional(),
+  end: TimeSchema.optional(),
+  label: z.enum(["morning", "afternoon", "evening", "night"]).optional(),
+});
 
 export const TaskSchema = z.object({
   id: z.string().min(1),
@@ -19,6 +24,7 @@ export const TaskSchema = z.object({
   locationCapturedAt: z.string().datetime().optional(),
   fixedTime: TimeSchema.optional(),
   durationMin: z.number().int().min(1).max(24 * 60).optional(),
+  timeWindow: TaskTimeWindowSchema.optional(),
   allDay: z.boolean().default(false),
   lockTime: z.boolean().default(false),
   deadlineDate: IsoDateSchema.optional(),

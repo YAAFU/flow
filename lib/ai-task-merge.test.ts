@@ -89,4 +89,44 @@ describe("AI plan task merge", () => {
     expect(moved.tasks[0].lng).toBeUndefined();
     expect(moved.tasks[0].locationSource).toBeUndefined();
   });
+
+  it("keeps drafts without duration unscheduled instead of inventing a schedule", () => {
+    const unknownDuration: PersistablePlannerDraft = {
+      ...draft,
+      draftId: "unknown",
+      title: "ดูหนัง",
+      durationMin: undefined,
+      durationSource: "unknown",
+      needsReview: true,
+      reviewReason: "ยังไม่ได้ระบุระยะเวลา",
+    };
+    const result = mergeScheduleIntoTasks({
+      existing: [],
+      drafts: [unknownDuration],
+      schedule: [],
+      categories: [],
+      now: "2026-07-21T12:00:00.000Z",
+      createId: () => "generated",
+    });
+    expect(result.tasks).toHaveLength(1);
+    expect(result.tasks[0]).toMatchObject({ title: "ดูหนัง", fixedTime: undefined, durationMin: undefined, needsReview: true });
+    expect(result.includedDrafts).toEqual([unknownDuration]);
+  });
+
+  it("does not allow a plan to move a locked draft before it reaches the store", () => {
+    const lockedDraft: PersistablePlannerDraft = {
+      ...draft,
+      fixedTime: "13:00",
+      durationMin: 60,
+      lockTime: true,
+    };
+    expect(() => mergeScheduleIntoTasks({
+      existing: [],
+      drafts: [lockedDraft],
+      schedule: [{ taskId: plannerDraftTaskId("new"), title: "งานใหม่", placeLabel: "", start: "13:30", end: "14:30", travelFromPrevMin: 0 }],
+      categories: [],
+      now: "2026-07-21T12:00:00.000Z",
+      createId: () => "generated",
+    })).toThrow("แผนพยายามเลื่อนงานที่ล็อกเวลาไว้");
+  });
 });

@@ -4,6 +4,19 @@ import { findScheduleOverlaps } from "@/lib/schedule-validation";
 import { PlanResultSchema, type Task } from "@/lib/types";
 
 describe("deterministic local planner", () => {
+  it("honors an explicit evening window instead of scheduling the task in the morning", () => {
+    const plan = buildLocalPlan([{
+      id: "evening",
+      title: "ทำรายงาน",
+      place: "",
+      priority: "normal",
+      durationMin: 120,
+      timeWindow: { label: "evening", start: "17:00", end: "21:00" },
+    }], { dayStart: "08:00", dayEnd: "22:00" });
+    expect(plan.plans.A.schedule[0]).toMatchObject({ taskId: "evening", start: "17:00", end: "19:00" });
+    expect(plan.plans.A.riskPoints.some((risk) => risk.reason.includes("อยู่นอกช่วง"))).toBe(false);
+  });
+
   const tasks: Task[] = [
     { id: "flex", title: "เขียนรายงาน", place: "บ้าน", durationMin: 60, priority: "normal", order: 1 },
     { id: "anchor", title: "ประชุม", place: "ออฟฟิศ", fixedTime: "10:00", durationMin: 60, lockTime: true, priority: "high", order: 0 },

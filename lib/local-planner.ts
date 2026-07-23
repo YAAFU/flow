@@ -7,7 +7,6 @@ import { addOverlapWarnings, findScheduleOverlaps } from "@/lib/schedule-validat
 
 const DAY_MINUTES = 24 * 60;
 const DEFAULT_START = 8 * 60;
-const DEFAULT_DURATION = 60;
 const PRIORITY_ORDER: Record<Task["priority"], number> = { urgent: 0, high: 1, normal: 2, flex: 3 };
 
 export type LocalPlannerOptions = {
@@ -26,7 +25,8 @@ function minuteLabel(value: number): string {
   return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
 }
 function durationFor(task: Task): number {
-  return Math.max(15, Math.min(DAY_MINUTES, task.durationMin ?? DEFAULT_DURATION));
+  if (task.durationMin == null) throw new Error(`Task duration is required for scheduling: ${task.id}`);
+  return Math.max(1, Math.min(DAY_MINUTES, task.durationMin));
 }
 
 type Coordinate = { latitude: number; longitude: number };
@@ -109,7 +109,11 @@ function createSchedule(tasks: Task[], bufferMin: number, defaultStart: number, 
   const placed = [...locked];
   for (const task of movable) {
     const duration = durationFor(task);
-    const preferred = task.fixedTime ? timeToMinutes(task.fixedTime) : defaultStart;
+    const preferred = task.fixedTime
+      ? timeToMinutes(task.fixedTime)
+      : task.timeWindow?.start
+        ? Math.max(defaultStart, timeToMinutes(task.timeWindow.start))
+        : defaultStart;
     const start = nextAvailableStart(preferred, duration, placed, bufferMin);
     placed.push({ task, start, end: start + duration });
   }
@@ -277,6 +281,23 @@ function createVariant(
     : [];
   if (travelWarning) riskPoints.push({ time: "การเดินทาง", reason: travelWarning });
   riskPoints.push(...travel.riskPoints);
+  const tasksById = new Map(tasks.map((task) => [task.id, task]));
+  for (const item of schedule) {
+    const window = tasksById.get(item.taskId)?.timeWindow;
+    if (!window?.start && !window?.end) continue;
+    const itemStart = timeToMinutes(item.start);
+    let itemEnd = timeToMinutes(item.end);
+    if (itemEnd <= itemStart) itemEnd += DAY_MINUTES;
+    const windowStart = window.start ? timeToMinutes(window.start) : 0;
+    let windowEnd = window.end ? timeToMinutes(window.end) : DAY_MINUTES;
+    if (windowEnd <= windowStart) windowEnd += DAY_MINUTES;
+    if (itemStart < windowStart || itemEnd > windowEnd) {
+      riskPoints.push({
+        time: `${item.start}–${item.end}`,
+        reason: `${item.title} อยู่นอกช่วง${window.label ? ` ${window.label}` : "เวลาที่ต้องการ"} กรุณาตรวจสอบก่อนบันทึก`,
+      });
+    }
+  }
   for (const item of schedule) {
     let start = timeToMinutes(item.start);
     if (dayEnd > DAY_MINUTES && start < dayStart) start += DAY_MINUTES;
@@ -290,10 +311,12 @@ function createVariant(
 }
 
 /**
- * Deterministic, server-safe fallback. It never invents tasks and keeps every
- * incoming task id exactly once in both plan variants.
+ * Deterministic, server-safe fallback. It never invents tasks or durations.
+ * Tasks without a duration remain outside the schedule with an explicit risk.
  */
 export function buildLocalPlan(tasks: Task[], options: LocalPlannerOptions = {}): PlanResult {
+  const schedulableTasks = tasks.filter((task) => task.durationMin != null);
+  const unscheduledTasks = tasks.filter((task) => task.durationMin == null);
   const parsedStart = options.dayStart ? timeToMinutes(options.dayStart) : DEFAULT_START;
   const rawEnd = options.dayEnd ? timeToMinutes(options.dayEnd) : 22 * 60;
   const parsedEnd = rawEnd <= parsedStart ? rawEnd + DAY_MINUTES : rawEnd;
@@ -320,8 +343,8 @@ export function buildLocalPlan(tasks: Task[], options: LocalPlannerOptions = {})
       : "พลังงานกลาง: รักษาสมดุลระหว่างงานและช่วงพัก";
   const base: PlanResult = {
     plans: {
-      A: createVariant(tasks, breakMin, parsedStart, parsedEnd, travelWarning, options.startLocation, options.travelContext),
-      B: createVariant(tasks, Math.min(240, breakMin + 15), parsedStart, parsedEnd, travelWarning, options.startLocation, options.travelContext),
+      A: createVariant(schedulableTasks, breakMin, parsedStart, parsedEnd, travelWarning, options.startLocation, options.travelContext),
+      B: createVariant(schedulableTasks, Math.min(240, breakMin + 15), parsedStart, parsedEnd, travelWarning, options.startLocation, options.travelContext),
     },
     summary: `กำลังใช้โหมดจัดแผนในเครื่อง ${energySummary} ระบบไม่ส่งข้อมูลไปยัง AI และ${hasRealTravel ? "ใช้เวลาประมาณจากบริการ routing เมื่อมีพิกัด" : "ยังไม่รวมเวลาเดินทาง"}`,
     tip: travelWarning ?? "รวมเวลาประมาณจากจุดเริ่มต้นและระหว่างงานที่มีพิกัดแล้ว โปรดตรวจสภาพการเดินทางจริงอีกครั้ง",
@@ -331,6 +354,13 @@ export function buildLocalPlan(tasks: Task[], options: LocalPlannerOptions = {})
 
   for (const variantName of ["A", "B"] as const) {
     const variant = warned.plans[variantName];
+    if (unscheduledTasks.length) {
+      variant.riskPoints.push({
+        time: "ยังไม่กำหนดเวลา",
+        reason: `${unscheduledTasks.length} งานยังไม่มีระยะเวลา ระบบจึงไม่สร้างเวลาเทียมและจะเก็บไว้ในส่วนรอ AI ประเมิน`,
+      });
+    }
+    variant.riskScore = Math.max(variant.riskScore, Math.min(100, variant.riskPoints.length * 20));
     variant.controlScore = controlBreakdown(variant.schedule, variant.riskPoints).score;
   }
 

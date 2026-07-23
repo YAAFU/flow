@@ -29,8 +29,9 @@ export function plannerDraftToTask(
     locationCapturedAt: draft.locationCapturedAt,
     fixedTime: draft.allDay ? undefined : draft.fixedTime,
     durationMin: draft.durationMin,
+    timeWindow: draft.timeWindow ?? undefined,
     allDay: draft.allDay,
-    lockTime: false,
+    lockTime: Boolean(draft.lockTime && draft.fixedTime),
     deadlineDate: draft.deadlineDate,
     deadlineTime: draft.deadlineTime,
     priority: draft.priority,
@@ -90,13 +91,14 @@ export function mergeScheduleIntoTasks({
     const draft = stableId ? draftsById.get(stableId) : undefined;
     if (!existingTask && !draft && !item.aiAdded) throw new Error("แผนมีงานที่ไม่ตรงกับข้อมูลปัจจุบัน กรุณาจัดแผนใหม่");
 
-    if (existingTask?.lockTime && existingTask.fixedTime) {
-      if (item.start !== existingTask.fixedTime) {
-        throw new Error(`แผนพยายามเลื่อนงานที่ล็อกเวลาไว้: ${existingTask.title}`);
+    const lockedBase = existingTask ?? (draft?.lockTime && draft.fixedTime ? plannerDraftToTask(draft, order, categories, now) : undefined);
+    if (lockedBase?.lockTime && lockedBase.fixedTime) {
+      if (item.start !== lockedBase.fixedTime) {
+        throw new Error(`แผนพยายามเลื่อนงานที่ล็อกเวลาไว้: ${lockedBase.title}`);
       }
       const plannedDuration = scheduleDurationMin(item.start, item.end);
-      if (existingTask.durationMin != null && plannedDuration !== existingTask.durationMin) {
-        throw new Error(`แผนพยายามเปลี่ยนระยะเวลาของงานที่ล็อกไว้: ${existingTask.title}`);
+      if (lockedBase.durationMin != null && plannedDuration !== lockedBase.durationMin) {
+        throw new Error(`แผนพยายามเปลี่ยนระยะเวลาของงานที่ล็อกไว้: ${lockedBase.title}`);
       }
     }
 
@@ -134,8 +136,11 @@ export function mergeScheduleIntoTasks({
   });
 
   const untouched = existing.filter((task) => !seen.has(task.id));
+  const unscheduledDrafts = drafts
+    .filter((draft) => !includedDraftIds.has(draft.draftId))
+    .map((draft, index) => plannerDraftToTask(draft, schedule.length + untouched.length + index, categories, now));
   return {
-    tasks: [...scheduled, ...untouched],
-    includedDrafts: drafts.filter((draft) => includedDraftIds.has(draft.draftId)),
+    tasks: [...scheduled, ...untouched, ...unscheduledDrafts],
+    includedDrafts: drafts,
   };
 }

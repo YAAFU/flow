@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { AlertCircle, ChevronDown, Clock3, FileText, Plus, SlidersHorizontal, Star } from "lucide-react";
+import { AlertCircle, ChevronDown, Clock3, FileText, Plus, SlidersHorizontal, Sparkles, Star } from "lucide-react";
 import { LocationDisclosure } from "@/components/location/LocationDisclosure";
 import {
   buildTaskFromFormDraft,
@@ -62,6 +62,7 @@ export function TaskInput({
   categories = [],
   date,
   quickLocations,
+  onOpenBulk,
 }: {
   onAdd: (task: Task, repeat: RepeatDraft) => void | Promise<void>;
   editing?: Task | null;
@@ -71,6 +72,7 @@ export function TaskInput({
   categories?: Category[];
   date?: string;
   quickLocations?: readonly TaskLocation[];
+  onOpenBulk?: () => void;
 }) {
   const [draft, setDraft] = useState<TaskFormDraft>(() => taskToFormDraft(editing));
   const [location, setLocation] = useState<TaskLocation | null>(() => taskLocationFromFlat(editing ?? {}));
@@ -257,6 +259,7 @@ export function TaskInput({
       </div>}
 
       {error && <p id={errorId} role="alert" className="flex items-start gap-2 rounded-xl border border-[var(--flow-warning)] p-3 text-sm font-semibold text-[var(--flow-warning)]"><AlertCircle aria-hidden size={17} className="mt-0.5 shrink-0" />{error}</p>}
+      {!editing && onOpenBulk && <button type="button" onClick={onOpenBulk} className="flow-press flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--flow-line)] px-3 text-sm font-semibold"><Sparkles size={16} className="text-[var(--flow-lime-dark)]" aria-hidden />พิมพ์ทีเดียวหลายงาน ให้ Flow แตกให้</button>}
       <p role="status" aria-live="polite" className="sr-only">{submitting ? (editing ? "กำลังบันทึกงาน" : "กำลังเพิ่มงาน") : ""}</p>
       <div className="sticky bottom-0 z-10 -mx-1 mt-1 flex gap-2 bg-[var(--flow-paper)] px-1 pb-[max(.25rem,env(safe-area-inset-bottom))] pt-2">
         {editing && <button type="button" onClick={onCancel} className="flow-press min-h-12 rounded-xl border-[1.5px] border-[var(--flow-ink)] px-4 text-sm font-semibold">ยกเลิก</button>}
