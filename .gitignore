@@ -16,6 +16,8 @@
 # next.js
 /.next/
 /out/
+/out-native/
+/.native-build/
 
 # production
 /build

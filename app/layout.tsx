@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Space_Grotesk } from "next/font/google";
+import { NativeThemeBootstrap } from "@/components/NativeThemeBootstrap";
+import { StartupErrorBoundary } from "@/components/StartupErrorBoundary";
 import "./globals.css";
 
 const grotesk = Space_Grotesk({
@@ -19,7 +21,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  interactiveWidget: "resizes-content",
+  ...(process.env.FLOW_NATIVE_BUILD === "1"
+    ? {}
+    : { interactiveWidget: "resizes-content" as const }),
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
     { media: "(prefers-color-scheme: dark)", color: "#111111" },
@@ -34,12 +38,20 @@ try {
   document.documentElement.dataset.theme = dark ? "dark" : "light";
 } catch { document.documentElement.dataset.theme = "light"; }
 `;
+const nativeBuild = process.env.FLOW_NATIVE_BUILD === "1";
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="th" className={grotesk.variable} suppressHydrationWarning data-scroll-behavior="smooth">
-      <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }} /></head>
-      <body>{children}</body>
+      <head>
+        {nativeBuild ? null : (
+          <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+        )}
+      </head>
+      <body>
+        {nativeBuild ? <NativeThemeBootstrap /> : null}
+        <StartupErrorBoundary>{children}</StartupErrorBoundary>
+      </body>
     </html>
   );
 }

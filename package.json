@@ -7,11 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "native:export": "node scripts/native-export.mjs",
+    "native:validate": "node scripts/validate-native-export.mjs",
+    "native:sync": "pnpm native:export && pnpm native:validate && cap sync android",
+    "android:debug": "node scripts/android-build.mjs debug",
+    "android:release": "node scripts/android-build.mjs release"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.102.0",
     "@base-ui/react": "^1.5.0",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "driver.js": "^1.4.0",
@@ -26,14 +33,18 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.0.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.2",
+    "esbuild": "^0.28.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "jsdom": "^29.1.1",
+    "lightningcss": "^1.33.0",
+    "postcss": "^8.5.23",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.8"
