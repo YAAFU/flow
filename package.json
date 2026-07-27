@@ -11,6 +11,7 @@
     "native:export": "node scripts/native-export.mjs",
     "native:validate": "node scripts/validate-native-export.mjs",
     "native:sync": "pnpm native:export && pnpm native:validate && cap sync android",
+    "android:icons:validate": "node scripts/validate-android-icons.mjs",
     "android:debug": "node scripts/android-build.mjs debug",
     "android:release": "node scripts/android-build.mjs release"
   },

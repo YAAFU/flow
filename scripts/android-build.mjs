@@ -58,6 +58,9 @@ const buildEnvironment = {
 
 assertSupportedJava();
 
+await run(process.execPath, [
+  path.join(root, "scripts", "validate-android-icons.mjs"),
+]);
 await run(
   process.execPath,
   [path.join(root, "scripts", "native-export.mjs")],
