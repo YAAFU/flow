@@ -1,18 +1,62 @@
 import { z } from "zod";
 
 export const PrioritySchema = z.enum(["urgent", "high", "normal", "flex"]);
+export const AiModeSchema = z.enum(["ai", "local"]);
 
-const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+export const IsoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const TimeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+export const LocationSourceSchema = z.enum(["search", "quick", "map", "live", "manual", "saved", "suggested", "recent"]);
+export const SavedPlaceCategorySchema = z.enum(["home", "school", "university", "work", "fitness", "custom"]);
+export const SavedPlaceSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().trim().min(1).max(80),
+  placeName: z.string().trim().min(1).max(500),
+  latitude: z.number().finite().min(-90).max(90).optional(),
+  longitude: z.number().finite().min(-180).max(180).optional(),
+  category: SavedPlaceCategorySchema.default("custom"),
+  icon: z.string().trim().max(40).optional(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+}).superRefine((value, context) => {
+  if ((value.latitude == null) !== (value.longitude == null)) {
+    context.addIssue({ code: "custom", message: "latitude and longitude must be provided together" });
+  }
+});
+export const RecentPlaceSchema = z.object({
+  placeKey: z.string().min(1),
+  placeName: z.string().trim().min(1).max(500),
+  latitude: z.number().finite().min(-90).max(90).optional(),
+  longitude: z.number().finite().min(-180).max(180).optional(),
+  lastUsedAt: z.string().datetime(),
+  useCount: z.number().int().min(1).default(1),
+  lastUsedDayOfWeek: z.number().int().min(0).max(6).optional(),
+  lastUsedHour: z.number().int().min(0).max(23).optional(),
+  categoryId: z.string().optional(),
+}).superRefine((value, context) => {
+  if ((value.latitude == null) !== (value.longitude == null)) {
+    context.addIssue({ code: "custom", message: "latitude and longitude must be provided together" });
+  }
+});
+export const TaskTimeWindowSchema = z.object({
+  start: TimeSchema.optional(),
+  end: TimeSchema.optional(),
+  label: z.enum(["morning", "afternoon", "evening", "night"]).optional(),
+});
 
 export const TaskSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
   place: z.string().default(""),
-  lat: z.number().optional(),
-  lng: z.number().optional(),
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
+  locationSource: LocationSourceSchema.optional(),
+  locationAccuracy: z.number().nonnegative().max(100_000).optional(),
+  locationCapturedAt: z.string().datetime().optional(),
   fixedTime: TimeSchema.optional(),
-  durationMin: z.number().int().min(15).max(24 * 60).optional(),
+  durationMin: z.number().int().min(1).max(24 * 60).optional(),
+  travelFromPrevMin: z.number().int().min(0).max(24 * 60).optional(),
+  timeWindow: TaskTimeWindowSchema.optional(),
   allDay: z.boolean().default(false),
   lockTime: z.boolean().default(false),
   deadlineDate: IsoDateSchema.optional(),
@@ -34,7 +78,7 @@ export const TaskSchema = z.object({
   originalDate: IsoDateSchema.optional(),
   createdAt: z.string().datetime().default(() => new Date().toISOString()),
   updatedAt: z.string().datetime().default(() => new Date().toISOString()),
-});
+}).catchall(z.any());
 
 export const CategorySchema = z.object({
   id: z.string().min(1),
@@ -65,19 +109,6 @@ export const DayMetaSchema = z.object({
   note: z.string().default(""),
 });
 
-export const FocusModeSchema = z.enum(["free", "pomodoro", "custom"]);
-export const FocusSessionSchema = z.object({
-  id: z.string().min(1),
-  taskId: z.string().optional(),
-  mode: FocusModeSchema,
-  startedAt: z.string().datetime(),
-  endedAt: z.string().datetime().optional(),
-  plannedMin: z.number().int().min(1),
-  actualMin: z.number().int().min(0).optional(),
-  completed: z.boolean().default(false),
-});
-export const ActiveFocusSessionSchema = FocusSessionSchema.pick({ id:true, taskId:true, mode:true, startedAt:true, plannedMin:true }).extend({ pausedAt:z.string().datetime().optional(), pausedMs:z.number().int().min(0).default(0) });
-
 export const ThemeSchema = z.enum(["system", "light", "dark"]);
 export const AppSettingsSchema = z.object({
   theme: ThemeSchema.default("system"),
@@ -88,30 +119,34 @@ export const AppSettingsSchema = z.object({
   autoMode: z.enum(["manual", "time", "location", "both"]).default("manual"),
   timezone: z.string().default("Asia/Bangkok"),
   calendarProvider: z.enum(["none", "google"]).default("none"),
-});
+  useLocationHistory: z.boolean().default(true),
+  suggestFrequentPlaces: z.boolean().default(true),
+  promptSaveFrequentPlaces: z.boolean().default(true),
+}).catchall(z.any());
 
 export const ScheduleItemSchema = z.object({
   taskId: z.string(),
-  title: z.string(),
+  title: z.string().min(1),
   placeLabel: z.string(),
   start: TimeSchema,
   end: TimeSchema,
-  travelFromPrevMin: z.number(),
+  travelFromPrevMin: z.number().int().min(0),
   aiAdded: z.boolean().optional(),
 });
 
 export const RiskPointSchema = z.object({ time: z.string(), reason: z.string() });
 export const PlanVariantSchema = z.object({
   schedule: z.array(ScheduleItemSchema),
-  controlScore: z.number(),
-  freeTimeMin: z.number(),
-  riskScore: z.number(),
+  controlScore: z.number().min(0).max(100),
+  freeTimeMin: z.number().min(0),
+  riskScore: z.number().min(0).max(100),
   riskPoints: z.array(RiskPointSchema),
 });
 export const PlanResultSchema = z.object({
   plans: z.object({ A: PlanVariantSchema, B: PlanVariantSchema }),
   summary: z.string(),
   tip: z.string(),
+  mode: AiModeSchema.optional(),
 });
 
 export const SlotSuggestionSchema = z.object({
@@ -130,21 +165,28 @@ export const ReminderLogSchema = z.object({
   notifiedAt: z.string().datetime(),
 });
 
+export const FLOW_STATE_SCHEMA_VERSION = 3 as const;
+
 export const FlowStateSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(FLOW_STATE_SCHEMA_VERSION),
   tasksByDay: z.record(z.string(), z.array(TaskSchema)),
   categories: z.array(CategorySchema),
   recurrenceRules: z.array(RecurrenceRuleSchema),
   dayMetaByDay: z.record(z.string(), DayMetaSchema),
-  focusSessions: z.array(FocusSessionSchema),
-  activeFocusSession: ActiveFocusSessionSchema.optional(),
+  savedPlaces: z.array(SavedPlaceSchema).default([]),
+  recentPlaces: z.array(RecentPlaceSchema).default([]),
   settings: AppSettingsSchema,
   reminderLog: z.array(ReminderLogSchema),
   selectedDate: IsoDateSchema,
   updatedAt: z.string().datetime(),
-});
+}).catchall(z.any());
 
 export type Priority = z.infer<typeof PrioritySchema>;
+export type AiMode = z.infer<typeof AiModeSchema>;
+export type LocationSource = z.infer<typeof LocationSourceSchema>;
+export type SavedPlaceCategory = z.infer<typeof SavedPlaceCategorySchema>;
+export type SavedPlace = z.infer<typeof SavedPlaceSchema>;
+export type RecentPlace = z.infer<typeof RecentPlaceSchema>;
 // Existing fixtures predate timestamps/defaulted fields. Keep their construction
 // source-compatible while parsing/storage always produces the normalized output.
 type TaskInput = z.input<typeof TaskSchema>;
@@ -158,10 +200,7 @@ export type StoredTask = z.output<typeof TaskSchema>;
 export type Category = z.infer<typeof CategorySchema>;
 export type RecurrenceRule = z.infer<typeof RecurrenceRuleSchema>;
 export type DayEnergy = z.infer<typeof DayEnergySchema>;
-export type FocusMode = z.infer<typeof FocusModeSchema>;
 export type DayMeta = z.infer<typeof DayMetaSchema>;
-export type FocusSession = z.infer<typeof FocusSessionSchema>;
-export type ActiveFocusSession = z.infer<typeof ActiveFocusSessionSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 export type FlowState = z.infer<typeof FlowStateSchema>;
 export type AutoMode = AppSettings["autoMode"];

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, Clock3, GripHorizontal, GripVertical, Route, Trash2 } from "lucide-react";
 import type { Category, Task } from "@/lib/types";
-import { endTime, localDateKey, minutesToTime, snapMinutes, timeToMinutes } from "@/lib/time";
+import { endTime, localDateKey, localTimeKey, minutesToTime, snapMinutes, timeToMinutes } from "@/lib/time";
 
 const PRIORITY_LABEL = { urgent: "ด่วน", high: "สำคัญ", normal: "ปกติ", flex: "ยืดหยุ่น" } as const;
 
@@ -45,16 +45,18 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
 
   scheduled.forEach((task, index) => {
     const next = scheduled[index + 1];
-    if (next && timeToMinutes(task.fixedTime ?? "00:00") + (task.durationMin ?? 60) > timeToMinutes(next.fixedTime ?? "00:00")) {
+    if (next && task.durationMin != null && timeToMinutes(task.fixedTime ?? "00:00") + task.durationMin > timeToMinutes(next.fixedTime ?? "00:00")) {
       collisions.add(task.id);
       collisions.add(next.id);
     }
   });
 
-  const commitKeyboard = (task: Task, start: number, duration: number) => {
+  const commitKeyboard = (task: Task, start: number, duration: number | undefined) => {
     const fixedTime = minutesToTime(start);
-    onChange({ ...task, fixedTime, durationMin: duration, updatedAt: new Date().toISOString() });
-    setAnnouncement(`${task.title} ย้ายไปเวลา ${fixedTime} ถึง ${endTime(fixedTime, duration)}`);
+    onChange({ ...task, fixedTime, durationMin: duration, travelFromPrevMin: fixedTime === task.fixedTime ? task.travelFromPrevMin : undefined, updatedAt: new Date().toISOString() });
+    setAnnouncement(duration == null
+      ? `${task.title} ย้ายไปเวลา ${fixedTime} ระยะเวลายังรอ AI ประเมิน`
+      : `${task.title} ย้ายไปเวลา ${fixedTime} ถึง ${endTime(fixedTime, duration)}`);
   };
 
   const beginDrag = (event: React.PointerEvent<HTMLElement>, task: Task, mode: DragState["mode"]) => {
@@ -88,8 +90,11 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
     if (!drag || drag.pointerId !== event.pointerId) return;
     event.preventDefault();
     const fixedTime = minutesToTime(drag.previewMin);
-    onChange({ ...task, fixedTime, durationMin: drag.previewDuration, updatedAt: new Date().toISOString() });
-    setAnnouncement(`${task.title} อยู่เวลา ${fixedTime} ถึง ${endTime(fixedTime, drag.previewDuration)}`);
+    const durationMin = drag.mode === "resize" ? drag.previewDuration : task.durationMin;
+    onChange({ ...task, fixedTime, durationMin, travelFromPrevMin: drag.mode === "move" ? undefined : task.travelFromPrevMin, updatedAt: new Date().toISOString() });
+    setAnnouncement(durationMin == null
+      ? `${task.title} อยู่เวลา ${fixedTime} ระยะเวลายังรอ AI ประเมิน`
+      : `${task.title} อยู่เวลา ${fixedTime} ถึง ${endTime(fixedTime, durationMin)}`);
     setDrag(null);
   };
 
@@ -105,7 +110,7 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
     </article>
   );
 
-  const currentMinutes = (() => { const now = new Date(); return now.getHours() * 60 + now.getMinutes(); })();
+  const currentMinutes = timeToMinutes(localTimeKey());
   const showNow = date === localDateKey() && currentMinutes >= startHour * 60 && currentMinutes <= endHour * 60;
 
   return (
@@ -114,14 +119,16 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
       {allDay.length > 0 && <section aria-labelledby="all-day-heading"><div className="mb-2 flex items-center justify-between"><h2 id="all-day-heading" className="text-sm font-bold">ทั้งวัน</h2><span className="font-grotesk text-[10px] text-[var(--flow-muted)]">{allDay.length} ITEMS</span></div><div className="flow-stagger space-y-2">{allDay.map(compactCard)}</div></section>}
 
       <section aria-labelledby="timeline-heading">
-        <div className="mb-3 flex items-end justify-between"><div><p className="text-xs text-[var(--flow-muted)]">ลากเพื่อย้าย · จับขอบล่างเพื่อย่อขยาย</p><h2 id="timeline-heading" className="mt-0.5 text-lg font-bold">ไทม์ไลน์ของวัน</h2></div><span className="font-grotesk rounded-full border flow-hairline px-2.5 py-1 text-[10px]">{String(startHour).padStart(2, "0")}:00–{String(endHour).padStart(2, "0")}:00</span></div>
+        <div data-tour="timeline" className="mb-3 flex items-end justify-between"><div><p className="text-xs text-[var(--flow-muted)]">ลากเพื่อย้าย · จับขอบล่างเพื่อย่อขยาย</p><h2 id="timeline-heading" className="mt-0.5 text-lg font-bold">ไทม์ไลน์ของวัน</h2></div><span className="font-grotesk rounded-full border flow-hairline px-2.5 py-1 text-[10px]">{String(startHour).padStart(2, "0")}:00–{String(endHour).padStart(2, "0")}:00</span></div>
         <div ref={board} className="flow-surface relative overflow-hidden rounded-[22px] border-[1.5px] border-[var(--flow-line)] shadow-[var(--flow-shadow-small)]" style={{ height: boardHeight }}>
           {Array.from({ length: endHour - startHour + 1 }, (_, index) => <div key={index} className="pointer-events-none absolute inset-x-0 border-t flow-hairline" style={{ top: `${(index * 60 / totalMinutes) * 100}%` }}><span className="font-grotesk absolute left-2 top-1 rounded bg-[var(--flow-surface)] px-1 text-[10px] text-[var(--flow-muted)]">{String(startHour + index).padStart(2, "0")}:00</span></div>)}
           {showNow && <div className="pointer-events-none absolute inset-x-10 z-20 flex items-center" style={{ top: `${((currentMinutes - startHour * 60) / totalMinutes) * 100}%` }}><span className="h-2.5 w-2.5 rounded-full bg-[var(--flow-lime-dark)] ring-2 ring-[var(--flow-paper)]"/><span className="h-0.5 flex-1 bg-[var(--flow-lime-dark)]"/><span className="font-grotesk ml-1 rounded bg-[var(--flow-lime)] px-1.5 py-0.5 text-[9px] font-bold text-[#111111]">NOW</span></div>}
           {scheduled.map((task) => {
-            const isDragging = drag?.id === task.id;
-            const start = isDragging ? drag.previewMin : timeToMinutes(task.fixedTime ?? "00:00");
-            const duration = isDragging ? drag.previewDuration : task.durationMin ?? 60;
+            const activeDrag = drag?.id === task.id ? drag : null;
+            const isDragging = activeDrag !== null;
+            const awaitingDuration = task.durationMin == null && drag?.mode !== "resize";
+            const start = activeDrag?.previewMin ?? timeToMinutes(task.fixedTime ?? "00:00");
+            const duration = activeDrag?.previewDuration ?? task.durationMin ?? 60;
             const top = clamp(((start - startHour * 60) / totalMinutes) * 100, 0, 100);
             const height = Math.max(48, (duration / totalMinutes) * boardHeight);
             const originalTop = clamp(((timeToMinutes(task.fixedTime ?? "00:00") - startHour * 60) / totalMinutes) * 100, 0, 100);
@@ -133,10 +140,10 @@ export function DayTimeline({ date, tasks, categories, startHour, endHour, onCha
                   <button type="button" onPointerDown={(event) => beginDrag(event, task, "move")} onPointerMove={updateDrag} onPointerUp={(event) => finishDrag(event, task)} onPointerCancel={cancelDrag} onKeyDown={(event) => {
                     const startMin = timeToMinutes(task.fixedTime ?? "00:00");
                     if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); commitKeyboard(task, startMin, Math.max(15, (task.durationMin ?? 60) + (event.key === "ArrowUp" ? -15 : 15))); return; }
-                    if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); commitKeyboard(task, clamp(startMin + (event.key === "ArrowUp" ? -15 : 15), startHour * 60, endHour * 60 - (task.durationMin ?? 60)), task.durationMin ?? 60); }
-                  }} className="touch-none flex h-full w-full items-start gap-1.5 overflow-hidden px-2 py-2 pr-12 text-left focus-visible:z-20" aria-label={`${task.title} เวลา ${minutesToTime(start)} ถึง ${endTime(minutesToTime(start), duration)} ใช้ลูกศรขึ้นลงเพื่อย้าย 15 นาที หรือ Shift พร้อมลูกศรเพื่อปรับระยะเวลา`}>
+                    if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); commitKeyboard(task, clamp(startMin + (event.key === "ArrowUp" ? -15 : 15), startHour * 60, endHour * 60 - (task.durationMin ?? 60)), task.durationMin); }
+                  }} className="touch-none flex h-full w-full items-start gap-1.5 overflow-hidden px-2 py-2 pr-12 text-left focus-visible:z-20" aria-label={`${task.title} เวลา ${minutesToTime(start)}${awaitingDuration ? " ระยะเวลารอ AI ประเมิน" : ` ถึง ${endTime(minutesToTime(start), duration)}`} ใช้ลูกศรขึ้นลงเพื่อย้าย 15 นาที หรือ Shift พร้อมลูกศรเพื่อปรับระยะเวลา`}>
                     <GripVertical size={14} className="mt-0.5 shrink-0 text-[var(--flow-muted)]" aria-hidden />
-                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{task.aiAdded && <Route size={13} className="mr-1 inline text-[var(--flow-lime-dark)]" aria-label="Travel block ที่ AI เพิ่ม"/>}{task.title}</span><span className="font-grotesk block text-[10px] text-[var(--flow-muted)]">{minutesToTime(start)}–{endTime(minutesToTime(start), duration)} · {duration}m</span>{collisions.has(task.id) && <span className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-[var(--flow-warning)]"><AlertTriangle size={10} aria-hidden />เวลาชน</span>}</span>
+                    <span className="min-w-0"><span className="block truncate text-sm font-semibold">{task.aiAdded && <Route size={13} className="mr-1 inline text-[var(--flow-lime-dark)]" aria-label="Travel block ที่ AI เพิ่ม"/>}{task.title}</span><span className="font-grotesk block text-[10px] text-[var(--flow-muted)]">{awaitingDuration ? `${minutesToTime(start)} · รอ AI ประเมินระยะเวลา` : `${minutesToTime(start)}–${endTime(minutesToTime(start), duration)} · ${duration}m`}{task.travelFromPrevMin ? ` · เดินทาง ${task.travelFromPrevMin}m` : ""}</span>{collisions.has(task.id) && <span className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-[var(--flow-warning)]"><AlertTriangle size={10} aria-hidden />เวลาชน</span>}</span>
                   </button>
                   <button type="button" onPointerDown={(event) => beginDrag(event, task, "resize")} onPointerMove={updateDrag} onPointerUp={(event) => finishDrag(event, task)} onPointerCancel={cancelDrag} onKeyDown={(event)=>{if(event.key!=="ArrowUp"&&event.key!=="ArrowDown")return;event.preventDefault();const nextDuration=Math.max(15,(task.durationMin??60)+(event.key==="ArrowUp"?-15:15));commitKeyboard(task,timeToMinutes(task.fixedTime??"00:00"),nextDuration);}} onClick={(event)=>{if(event.detail===0)commitKeyboard(task,timeToMinutes(task.fixedTime??"00:00"),(task.durationMin??60)+15);}} className="touch-none absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center rounded-tl-xl border-l border-t flow-hairline bg-[var(--flow-surface)]" aria-label={`ปรับระยะเวลา ${task.title} ใช้ลูกศรขึ้นลง หรือกดเพื่อเพิ่ม 15 นาที`}><GripHorizontal size={16} aria-hidden /></button>
                 </article>

@@ -4,6 +4,11 @@ import Link from "next/link";
 import { ArrowRight, CloudOff, HardDrive, Zap } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import {
+  canPersistOnboardingState,
+  loadOnboardingState,
+  onboardingEntryPath,
+} from "@/lib/onboarding";
 
 const DEMO_USERNAME = "demo@flow.app";
 const DEMO_PASSWORD = "123456";
@@ -13,7 +18,17 @@ export default function LoginPage() {
   const [error, setError] = useState("");
 
   function enterGuestMode() {
-    router.replace("/app");
+    let destination: "/guide" | "/app" = "/guide";
+    try {
+      destination = canPersistOnboardingState(window.localStorage)
+        ? onboardingEntryPath(loadOnboardingState(window.localStorage))
+        : "/app";
+    } catch {
+      // Guidance must fail open when browser privacy settings block storage,
+      // otherwise completing or skipping it could redirect in a loop.
+      destination = "/app";
+    }
+    router.replace(destination);
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {

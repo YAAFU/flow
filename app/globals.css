@@ -18,6 +18,24 @@
   --flow-inverse:#111111;
   --flow-inverse-text:#ffffff;
   --flow-warning:#b96300;
+  --flow-surface-page:var(--flow-paper);
+  --flow-surface-card:var(--flow-paper);
+  --flow-surface-elevated:var(--flow-surface);
+  --flow-surface-muted:var(--flow-surface-strong);
+  --flow-text-primary:var(--flow-ink);
+  --flow-text-secondary:#42423e;
+  --flow-text-muted:var(--flow-muted);
+  --flow-border-default:color-mix(in srgb,var(--flow-line) 58%,transparent);
+  --flow-border-strong:var(--flow-line);
+  --flow-input-background:var(--flow-paper);
+  --flow-overlay-background:rgba(17,17,17,.62);
+  --flow-accent:var(--flow-lime);
+  --flow-accent-foreground:#111111;
+  --flow-danger:#a61b1b;
+  --flow-danger-surface:#fff0f0;
+  --flow-danger-text:#861111;
+  --flow-warning-surface:#fff7e7;
+  --flow-warning-text:#7a4300;
   --flow-shadow:0 12px 36px rgba(17,17,17,.08);
   --flow-shadow-small:0 4px 14px rgba(17,17,17,.07);
   --flow-ease:cubic-bezier(.22,1,.36,1);
@@ -35,6 +53,15 @@ html[data-theme="dark"]{
   /* Inverse cards stay black in both themes so the CI lime remains readable. */
   --flow-inverse:#111111;
   --flow-inverse-text:#ffffff;
+  --flow-text-secondary:#d2d2c8;
+  --flow-border-default:color-mix(in srgb,var(--flow-line) 42%,transparent);
+  --flow-input-background:#171715;
+  --flow-overlay-background:rgba(0,0,0,.72);
+  --flow-danger:#ff8c8c;
+  --flow-danger-surface:#351919;
+  --flow-danger-text:#ffc1c1;
+  --flow-warning-surface:#332713;
+  --flow-warning-text:#ffd38a;
   --flow-shadow:0 16px 42px rgba(0,0,0,.32);
   --flow-shadow-small:0 6px 18px rgba(0,0,0,.24);
   color-scheme:dark;
@@ -61,6 +88,16 @@ button:disabled{cursor:not-allowed;opacity:.48}
 .flow-form :is(input,select,textarea){min-width:0;background-color:var(--flow-paper);border-color:color-mix(in srgb,var(--flow-line) 72%,transparent);transition:border-color .2s ease,box-shadow .2s ease,transform .2s var(--flow-ease)}
 .flow-form :is(input,select,textarea):hover{border-color:var(--flow-line)}
 .flow-form input[type="checkbox"]{accent-color:var(--flow-lime-dark)}
+.flow-planner-dialog{color:var(--flow-text-primary)}
+.flow-planner-dialog :is(input,select,textarea){background-color:var(--flow-input-background);color:var(--flow-text-primary);border-color:var(--flow-border-default)}
+.flow-planner-dialog :is(input,select,textarea)::placeholder{color:var(--flow-text-muted);opacity:1}
+.flow-planner-dialog :is(input,select,textarea):hover{border-color:var(--flow-border-strong)}
+.flow-planner-dialog :is(input,select,textarea):focus-visible{border-color:var(--flow-accent)}
+.flow-planner-status{background-color:var(--flow-surface-elevated);color:var(--flow-text-primary);border:1.5px solid var(--flow-border-default)}
+.flow-planner-status-secondary{color:var(--flow-text-secondary)}
+.flow-danger-panel{border-color:var(--flow-danger);background:var(--flow-danger-surface);color:var(--flow-danger-text)}
+.flow-warning-panel{background:var(--flow-warning-surface);color:var(--flow-warning-text)}
+html[data-theme="dark"] .flow-planner-dialog :is(input[type="date"],input[type="time"]){color-scheme:dark}
 
 /* Motion language: short distance, quick response, calm settle. */
 @keyframes flow-rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
