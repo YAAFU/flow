@@ -8,7 +8,6 @@ export const PRODUCT_EVENT_NAMES = [
   "first_task_created",
   "first_plan_generated",
   "first_timeline_viewed",
-  "first_focus_started",
   "tour_reopened",
   "product_guide_started",
   "product_guide_step_completed",
@@ -34,14 +33,6 @@ export const PRODUCT_EVENT_NAMES = [
   "location_selected",
   "location_suggestion_used",
   "recent_locations_cleared",
-  "focus_opened",
-  "focus_started",
-  "focus_paused",
-  "focus_completed",
-  "focus_task_completed",
-  "focus_continued",
-  "focus_reschedule_requested",
-  "focus_plan_applied",
 ] as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
@@ -96,11 +87,6 @@ export type ProductEventMetadata = {
   source?: "saved" | "suggested" | "recent" | "search" | "map" | "live" | "manual";
   category?: "home" | "school" | "university" | "work" | "fitness" | "custom";
   hasCoordinates?: boolean;
-  sessionMode?: "free" | "pomodoro" | "custom" | "long" | "remaining_task_time";
-  plannedDurationMin?: number;
-  actualDurationMin?: number;
-  hasNextLockedTask?: boolean;
-  outcome?: "completed" | "continued" | "rescheduled" | "paused" | "abandoned";
 };
 
 export type SanitizedProductEventMetadata = Readonly<ProductEventMetadata>;
@@ -126,7 +112,6 @@ const EVENT_METADATA_KEYS: Record<ProductEventName, readonly MetadataKey[]> = {
   first_task_created: ["entryPoint"],
   first_plan_generated: ["plannerMode", "completionStatus", "durationBucket"],
   first_timeline_viewed: ["entryPoint"],
-  first_focus_started: ["entryPoint"],
   tour_reopened: ["entryPoint"],
   product_guide_started: ["entryPoint"],
   product_guide_step_completed: ["step"],
@@ -152,14 +137,6 @@ const EVENT_METADATA_KEYS: Record<ProductEventName, readonly MetadataKey[]> = {
   location_selected: ["source", "hasCoordinates"],
   location_suggestion_used: ["source", "hasCoordinates"],
   recent_locations_cleared: [],
-  focus_opened: ["hasNextLockedTask"],
-  focus_started: ["sessionMode", "plannedDurationMin", "hasNextLockedTask"],
-  focus_paused: ["sessionMode", "actualDurationMin"],
-  focus_completed: ["sessionMode", "plannedDurationMin", "actualDurationMin", "hasNextLockedTask", "outcome"],
-  focus_task_completed: ["actualDurationMin"],
-  focus_continued: ["plannedDurationMin", "hasNextLockedTask"],
-  focus_reschedule_requested: ["plannedDurationMin", "hasNextLockedTask"],
-  focus_plan_applied: ["plannerMode"],
 };
 
 const ENTRY_POINTS = new Set<string>(ANALYTICS_ENTRY_POINTS);
@@ -169,8 +146,6 @@ const COMPLETION_STATUSES = new Set<string>(ANALYTICS_COMPLETION_STATUSES);
 const DURATION_BUCKETS = new Set<string>(ANALYTICS_DURATION_BUCKETS);
 const LOCATION_SOURCES = new Set(["saved", "suggested", "recent", "search", "map", "live", "manual"]);
 const PLACE_CATEGORIES = new Set(["home", "school", "university", "work", "fitness", "custom"]);
-const FOCUS_MODES = new Set(["free", "pomodoro", "custom", "long", "remaining_task_time"]);
-const FOCUS_OUTCOMES = new Set(["completed", "continued", "rescheduled", "paused", "abandoned"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -214,19 +189,11 @@ function sanitizeValue(key: MetadataKey, value: unknown): ProductEventMetadata[M
     case "requiredPlanner":
     case "success":
     case "hasCoordinates":
-    case "hasNextLockedTask":
       return typeof value === "boolean" ? value : undefined;
     case "source":
       return typeof value === "string" && LOCATION_SOURCES.has(value) ? value as ProductEventMetadata["source"] : undefined;
     case "category":
       return typeof value === "string" && PLACE_CATEGORIES.has(value) ? value as ProductEventMetadata["category"] : undefined;
-    case "sessionMode":
-      return typeof value === "string" && FOCUS_MODES.has(value) ? value as ProductEventMetadata["sessionMode"] : undefined;
-    case "outcome":
-      return typeof value === "string" && FOCUS_OUTCOMES.has(value) ? value as ProductEventMetadata["outcome"] : undefined;
-    case "plannedDurationMin":
-    case "actualDurationMin":
-      return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1440 ? Math.round(value) : undefined;
   }
 }
 

@@ -83,7 +83,7 @@ describe("product analytics privacy boundary", () => {
     });
   });
 
-  it("keeps place and focus metadata but removes names and coordinates", () => {
+  it("keeps aggregate place metadata but removes names and coordinates", () => {
     expect(sanitizeProductEventMetadata("saved_place_created", {
       category: "home",
       hasCoordinates: true,
@@ -92,21 +92,6 @@ describe("product analytics privacy boundary", () => {
       latitude: 13.7,
       longitude: 100.5,
     })).toEqual({ category: "home", hasCoordinates: true });
-    expect(sanitizeProductEventMetadata("focus_completed", {
-      sessionMode: "remaining_task_time",
-      plannedDurationMin: 30,
-      actualDurationMin: 28,
-      hasNextLockedTask: true,
-      outcome: "completed",
-      taskTitle: "งานลับ",
-      taskId: "private-id",
-    })).toEqual({
-      sessionMode: "remaining_task_time",
-      plannedDurationMin: 30,
-      actualDurationMin: 28,
-      hasNextLockedTask: true,
-      outcome: "completed",
-    });
   });
 
   it("sends a frozen, sanitized event to an injected provider", () => {

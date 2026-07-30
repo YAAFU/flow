@@ -84,7 +84,8 @@ describe("SettingsPanel help actions", () => {
 
     await click(findButton("รีเซ็ตสถานะคำแนะนำ"));
     expect(onResetGuidance).not.toHaveBeenCalled();
-    expect(container?.textContent).toContain("ไม่ลบงาน หมวดหมู่ Focus Session หรือการตั้งค่าอื่น");
+    expect(container?.textContent).toContain("ไม่ลบงาน หมวดหมู่ หรือการตั้งค่าอื่น");
+    expect(container?.textContent).not.toContain("ค่าเริ่มต้น Focus");
 
     await click(findButton("ยกเลิก"));
     expect(onResetGuidance).not.toHaveBeenCalled();

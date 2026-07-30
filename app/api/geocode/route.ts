@@ -9,12 +9,34 @@ const GEOCODE_TIMEOUT_MS = 6_000;
 
 type Hit = { name: string; lat: number; lng: number };
 
+function parseCoordinate(value: unknown) {
+  if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return null;
+  const coordinate = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(coordinate) ? coordinate : null;
+}
+
 function validCoordinates(latitude: unknown, longitude: unknown) {
-  const lat = typeof latitude === "number" ? latitude : Number(latitude);
-  const lng = typeof longitude === "number" ? longitude : Number(longitude);
-  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+  const lat = parseCoordinate(latitude);
+  const lng = parseCoordinate(longitude);
+  return lat !== null && lng !== null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
     ? { lat, lng }
     : null;
+}
+
+function parseNominatimHits(value: unknown): Hit[] | null {
+  if (!Array.isArray(value)) return null;
+  const hits: Hit[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    const coordinates = validCoordinates(record.lat, record.lon);
+    if (!coordinates) continue;
+    const displayName = typeof record.display_name === "string" ? record.display_name : "";
+    const suppliedName = typeof record.name === "string" ? record.name.trim() : "";
+    const name = suppliedName || displayName.split(",")[0]?.trim();
+    if (name) hits.push({ name, ...coordinates });
+  }
+  return hits;
 }
 
 async function reverseGeocode(lat: number, lng: number) {
@@ -93,9 +115,7 @@ async function searchNominatim(q: string): Promise<Hit[] | null> {
       next: { revalidate: 3600 },
     });
     if (!r.ok) return null;
-    const data = (await r.json()) as Array<{ display_name: string; name?: string; lat: string; lon: string }>;
-    return data.map((d) => ({ name: d.name || d.display_name.split(",")[0], lat: Number(d.lat), lng: Number(d.lon) }))
-      .filter((hit) => hit.name && Number.isFinite(hit.lat) && Number.isFinite(hit.lng));
+    return parseNominatimHits(await r.json());
   } catch {
     return null;
   }

@@ -109,23 +109,6 @@ export const DayMetaSchema = z.object({
   note: z.string().default(""),
 });
 
-export const FocusModeSchema = z.enum(["free", "pomodoro", "custom", "long", "remaining_task_time"]);
-export const FocusOutcomeSchema = z.enum(["completed", "continued", "rescheduled", "paused", "abandoned"]);
-export const FocusSessionSchema = z.object({
-  id: z.string().min(1),
-  taskId: z.string().optional(),
-  date: IsoDateSchema.optional(),
-  mode: FocusModeSchema,
-  startedAt: z.string().datetime(),
-  endedAt: z.string().datetime().optional(),
-  plannedMin: z.number().int().min(1),
-  actualMin: z.number().int().min(0).optional(),
-  completed: z.boolean().default(false),
-  outcome: FocusOutcomeSchema.optional(),
-  createdAt: z.string().datetime().optional(),
-});
-export const ActiveFocusSessionSchema = FocusSessionSchema.pick({ id:true, taskId:true, date:true, mode:true, startedAt:true, plannedMin:true }).extend({ pausedAt:z.string().datetime().optional(), pausedMs:z.number().int().min(0).default(0) });
-
 export const ThemeSchema = z.enum(["system", "light", "dark"]);
 export const AppSettingsSchema = z.object({
   theme: ThemeSchema.default("system"),
@@ -136,8 +119,6 @@ export const AppSettingsSchema = z.object({
   autoMode: z.enum(["manual", "time", "location", "both"]).default("manual"),
   timezone: z.string().default("Asia/Bangkok"),
   calendarProvider: z.enum(["none", "google"]).default("none"),
-  defaultFocusMode: FocusModeSchema.default("pomodoro"),
-  focusBreakBufferMin: z.number().int().min(0).max(60).default(10),
   useLocationHistory: z.boolean().default(true),
   suggestFrequentPlaces: z.boolean().default(true),
   promptSaveFrequentPlaces: z.boolean().default(true),
@@ -184,14 +165,14 @@ export const ReminderLogSchema = z.object({
   notifiedAt: z.string().datetime(),
 });
 
+export const FLOW_STATE_SCHEMA_VERSION = 3 as const;
+
 export const FlowStateSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(FLOW_STATE_SCHEMA_VERSION),
   tasksByDay: z.record(z.string(), z.array(TaskSchema)),
   categories: z.array(CategorySchema),
   recurrenceRules: z.array(RecurrenceRuleSchema),
   dayMetaByDay: z.record(z.string(), DayMetaSchema),
-  focusSessions: z.array(FocusSessionSchema),
-  activeFocusSession: ActiveFocusSessionSchema.optional(),
   savedPlaces: z.array(SavedPlaceSchema).default([]),
   recentPlaces: z.array(RecentPlaceSchema).default([]),
   settings: AppSettingsSchema,
@@ -219,11 +200,7 @@ export type StoredTask = z.output<typeof TaskSchema>;
 export type Category = z.infer<typeof CategorySchema>;
 export type RecurrenceRule = z.infer<typeof RecurrenceRuleSchema>;
 export type DayEnergy = z.infer<typeof DayEnergySchema>;
-export type FocusMode = z.infer<typeof FocusModeSchema>;
 export type DayMeta = z.infer<typeof DayMetaSchema>;
-export type FocusSession = z.infer<typeof FocusSessionSchema>;
-export type FocusOutcome = z.infer<typeof FocusOutcomeSchema>;
-export type ActiveFocusSession = z.infer<typeof ActiveFocusSessionSchema>;
 export type AppSettings = z.infer<typeof AppSettingsSchema>;
 export type FlowState = z.infer<typeof FlowStateSchema>;
 export type AutoMode = AppSettings["autoMode"];

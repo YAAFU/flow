@@ -153,17 +153,16 @@ afterEach(() => {
 });
 
 describe("GuidedTour definitions", () => {
-  it("uses five unique semantic targets for the core tour", () => {
-    expect(CORE_TOUR_STEPS).toHaveLength(5);
+  it("uses four unique semantic targets for the core tour", () => {
+    expect(CORE_TOUR_STEPS).toHaveLength(4);
     expect(CORE_TOUR_STEPS.map((step) => step.target)).toEqual([
       TOUR_TARGETS.todayPulse,
       TOUR_TARGETS.primaryAction,
       TOUR_TARGETS.aiPlanner,
       TOUR_TARGETS.timeline,
-      TOUR_TARGETS.focus,
     ]);
-    expect(new Set(CORE_TOUR_STEPS.map((step) => step.target)).size).toBe(5);
-    expect(getTourSteps("core")).toHaveLength(5);
+    expect(new Set(CORE_TOUR_STEPS.map((step) => step.target)).size).toBe(4);
+    expect(getTourSteps("core")).toHaveLength(4);
   });
 
   it("keeps the full tour optional and adds each navigation target once", () => {
@@ -201,7 +200,7 @@ describe("GuidedTour target handling", () => {
     );
 
     const controller = new AbortController();
-    const cancelled = waitForTourTarget(TOUR_TARGETS.focus, {
+    const cancelled = waitForTourTarget(TOUR_TARGETS.calendarNav, {
       timeoutMs: 100,
       signal: controller.signal,
     });
@@ -238,16 +237,13 @@ describe("GuidedTour runtime", () => {
     expect(config.steps?.[1]?.popover?.progressText).toBeUndefined();
   });
 
-  it("asks the parent to switch view before showing Timeline and Focus", async () => {
+  it("asks the parent to switch view before showing Timeline", async () => {
     addTarget(TOUR_TARGETS.todayPulse);
     addTarget(TOUR_TARGETS.primaryAction);
     addTarget(TOUR_TARGETS.aiPlanner);
     const onNavigate = vi.fn((view: string) => {
       if (view === "timeline" && !document.querySelector(TOUR_TARGETS.timeline)) {
         addTarget(TOUR_TARGETS.timeline);
-      }
-      if (view === "focus" && !document.querySelector(TOUR_TARGETS.focus)) {
-        addTarget(TOUR_TARGETS.focus);
       }
     });
     const session = startTour({ onNavigate, targetTimeoutMs: 50 });
@@ -261,11 +257,7 @@ describe("GuidedTour runtime", () => {
       "timeline",
       expect.objectContaining({ target: TOUR_TARGETS.timeline }),
     );
-    await nextFrom(3);
-    expect(onNavigate).toHaveBeenCalledWith(
-      "focus",
-      expect.objectContaining({ target: TOUR_TARGETS.focus }),
-    );
+    expect(onNavigate).not.toHaveBeenCalledWith("focus", expect.anything());
   });
 
   it("completes only after the final available step", async () => {
@@ -280,7 +272,6 @@ describe("GuidedTour runtime", () => {
     await nextFrom(1);
     await nextFrom(2);
     await nextFrom(3);
-    latestRecord().config.steps?.[4]?.popover?.onNextClick?.();
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
     expect(onClose).toHaveBeenCalledWith("completed");
     expect(latestRecord().instance.destroy).toHaveBeenCalledOnce();

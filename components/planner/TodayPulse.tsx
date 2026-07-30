@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Clock3, Coffee, Play } from "lucide-react";
+import { ArrowRight, Clock3, Coffee } from "lucide-react";
 import { endTime, localDateKey, localTimeKey, timeToMinutes } from "@/lib/time";
 import type { Task } from "@/lib/types";
 
@@ -12,19 +12,19 @@ function Remaining({ minutes }: { minutes: number }) {
   return <><span className="font-grotesk">{hours}</span> ชม.{rest ? <> <span className="font-grotesk">{rest}</span> นาที</> : null}</>;
 }
 
-export function TodayPulse({ date, tasks, startHour, endHour, primaryLabel = "เริ่มงานถัดไป", primaryIcon = "play", onOpenTimeline, onStartFocus }: {
+export function TodayPulse({ date, tasks, startHour, endHour, onOpenTimeline }: {
   date: string;
   tasks: Task[];
   startHour: number;
   endHour: number;
-  primaryLabel?: string;
-  primaryIcon?: "play" | "timeline";
   onOpenTimeline: () => void;
-  onStartFocus: () => void;
 }) {
   const now = new Date();
-  const isToday = date === localDateKey(now);
+  const today = localDateKey(now);
+  const isToday = date === today;
+  const isPast = date < today;
   const nowMin = timeToMinutes(localTimeKey(now));
+  const hasScheduledPlan = tasks.some((task) => task.fixedTime && !task.allDay);
   const scheduled = tasks
     .filter((task) => task.fixedTime && !task.allDay && !task.done)
     .sort((a, b) => (a.fixedTime ?? "").localeCompare(b.fixedTime ?? ""));
@@ -46,7 +46,12 @@ export function TodayPulse({ date, tasks, startHour, endHour, primaryLabel = "�
   const freeMinutes = Math.max(0, endHour * 60 - windowStart - usedFuture);
   const awaitingDuration = scheduled.some((task) => task.durationMin == null);
   const untilNext = next && isToday ? timeToMinutes(next.fixedTime ?? "00:00") - nowMin : null;
-  const planHasEnded = scheduled.length > 0 && !current && !next;
+  const planHasEnded = hasScheduledPlan && (isPast || (!current && !next));
+  const primaryLabel = planHasEnded
+    ? isToday
+      ? "ดู Timeline ของวันนี้"
+      : "ดู Timeline ของวันนั้น"
+    : "ดูงานถัดไปบน Timeline";
 
   return (
     <section data-tour="today-pulse" aria-labelledby="today-pulse-heading" className="flow-inverse flow-sheet overflow-hidden rounded-[22px] border-[1.5px] border-[#111111] shadow-[var(--flow-shadow)]">
@@ -70,10 +75,10 @@ export function TodayPulse({ date, tasks, startHour, endHour, primaryLabel = "�
         <button
           data-tour="primary-action"
           type="button"
-          onClick={onStartFocus}
+          onClick={onOpenTimeline}
           className="flow-press mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[var(--flow-lime)] px-4 font-semibold text-[#111111]"
         >
-          {primaryIcon === "play" ? <Play size={18} fill="currentColor" aria-hidden /> : <Clock3 size={18} aria-hidden />}
+          <Clock3 size={18} aria-hidden />
           {primaryLabel}
         </button>
       </div>
@@ -91,10 +96,6 @@ export function TodayPulse({ date, tasks, startHour, endHour, primaryLabel = "�
           {awaitingDuration && <p className="mt-1 text-[10px] opacity-55">ไม่รวมงานที่รอ AI ประเมินระยะเวลา</p>}
         </div>
       </div>
-
-      <button type="button" onClick={onOpenTimeline} className="flow-press flex min-h-12 w-full items-center justify-center gap-2 border-t border-current/15 text-sm font-semibold">
-        <CheckCircle2 size={16} className="text-[var(--flow-lime)]" aria-hidden />ดูความเป็นไปได้บน Timeline
-      </button>
     </section>
   );
 }

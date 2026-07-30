@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BACKUP_KEY, LEGACY_TASKS_KEY, STATE_KEY, createDefaultState, importState, loadState, migrateState, saveState, type StorageLike } from "@/lib/storage";
+import { BACKUP_KEY, LEGACY_TASKS_KEY, STATE_KEY, createDefaultState, exportState, importState, loadState, migrateState, saveState, type StorageLike } from "@/lib/storage";
 import { createTask } from "@/lib/task-factory";
 import { addTaskToDate } from "@/lib/task-state";
 
@@ -75,6 +75,8 @@ describe("storage migration", () => {
       recurrenceRules: [{ id: "rule", taskId: "task", frequency: "daily", interval: 1, startDate: "2026-07-20", excludedDates: [], createdAt: timestamp, updatedAt: timestamp }],
       dayMetaByDay: { "2026-07-20": { date: "2026-07-20", energy: "high", note: "พร้อม" } },
       focusSessions: [{ id: "focus", mode: "free", startedAt: timestamp, plannedMin: 25 }],
+      activeFocusSession: { id: "active-focus", mode: "pomodoro", startedAt: timestamp, plannedMin: 25 },
+      settings: { theme: "dark", defaultFocusMode: "long", focusBreakBufferMin: 20, integrationSetting: "keep" },
       reminderLog: [{ id: "notice", taskId: "task", occurrenceDate: "2026-07-20", offsetMin: 10, notifiedAt: timestamp }],
       integrationMetadata: { keepDuringSalvage: true },
       selectedDate: "2026-07-20",
@@ -83,8 +85,13 @@ describe("storage migration", () => {
     const state = loadState(storage);
     expect(state.recurrenceRules).toHaveLength(1);
     expect(state.dayMetaByDay["2026-07-20"].energy).toBe("high");
-    expect(state.focusSessions).toHaveLength(1);
     expect(state.reminderLog).toHaveLength(1);
+    expect(state.schemaVersion).toBe(3);
+    expect(state.settings).toMatchObject({ theme: "dark", integrationSetting: "keep" });
+    expect(state).not.toHaveProperty("focusSessions");
+    expect(state).not.toHaveProperty("activeFocusSession");
+    expect(state.settings).not.toHaveProperty("defaultFocusMode");
+    expect(state.settings).not.toHaveProperty("focusBreakBufferMin");
     expect((state as unknown as Record<string, unknown>).integrationMetadata).toEqual({ keepDuringSalvage: true });
   });
 
@@ -170,22 +177,84 @@ describe("storage migration", () => {
     expect(second).toEqual(first);
   });
 
-  it("adds smart-place defaults without losing existing focus history and stays idempotent", () => {
+  it("adds smart-place defaults, removes legacy Focus data, and stays idempotent", () => {
     const now = new Date("2026-07-23T00:00:00.000Z");
     const legacyV2 = {
       ...createDefaultState(now),
+      schemaVersion: 2,
       savedPlaces: undefined,
       recentPlaces: undefined,
       focusSessions: [{ id: "focus-old", taskId: "task", mode: "pomodoro", startedAt: now.toISOString(), plannedMin: 25, actualMin: 20, completed: true }],
+      activeFocusSession: { id: "active-old", taskId: "task", mode: "pomodoro", startedAt: now.toISOString(), plannedMin: 25 },
+      settings: { ...createDefaultState(now).settings, defaultFocusMode: "pomodoro", focusBreakBufferMin: 10 },
       integrationMetadata: { keep: true },
     };
     const first = migrateState(legacyV2, now);
     const second = migrateState(first, now);
     expect(first.savedPlaces).toEqual([]);
     expect(first.recentPlaces).toEqual([]);
-    expect(first.focusSessions[0]).toMatchObject({ id: "focus-old", actualMin: 20 });
+    expect(first.schemaVersion).toBe(3);
+    expect(first).not.toHaveProperty("focusSessions");
+    expect(first).not.toHaveProperty("activeFocusSession");
+    expect(first.settings).not.toHaveProperty("defaultFocusMode");
+    expect(first.settings).not.toHaveProperty("focusBreakBufferMin");
     expect((first as unknown as Record<string, unknown>).integrationMetadata).toEqual({ keep: true });
     expect(second).toEqual(first);
+  });
+
+  it("imports legacy v2 backups while preserving non-Focus user data", () => {
+    const now = new Date("2026-07-23T00:00:00.000Z");
+    const current = createDefaultState(now);
+    const legacyV2 = {
+      ...current,
+      schemaVersion: 2,
+      tasksByDay: {
+        "2026-07-23": [{
+          id: "legacy-task",
+          title: "งานจากไฟล์สำรอง",
+          place: "",
+          priority: "normal",
+          createdAt: now.toISOString(),
+          updatedAt: now.toISOString(),
+        }],
+      },
+      focusSessions: [{ id: "focus-old", mode: "pomodoro", startedAt: now.toISOString(), plannedMin: 25 }],
+      activeFocusSession: { id: "active-old", mode: "pomodoro", startedAt: now.toISOString(), plannedMin: 25 },
+      settings: { ...current.settings, defaultFocusMode: "long", focusBreakBufferMin: 15 },
+      integrationMetadata: { provider: "legacy-client" },
+    };
+
+    for (const mode of ["replace", "merge"] as const) {
+      const imported = importState(JSON.stringify(legacyV2), current, mode);
+      expect(imported.tasksByDay["2026-07-23"][0].title).toBe("งานจากไฟล์สำรอง");
+      expect(imported.schemaVersion).toBe(3);
+      expect(imported).not.toHaveProperty("focusSessions");
+      expect(imported).not.toHaveProperty("activeFocusSession");
+      expect(imported.settings).not.toHaveProperty("defaultFocusMode");
+      expect(imported.settings).not.toHaveProperty("focusBreakBufferMin");
+    }
+  });
+
+  it("does not re-emit injected legacy Focus fields when saving or exporting", () => {
+    const storage = new MemoryStorage();
+    const current = createDefaultState(new Date("2026-07-23T00:00:00.000Z"));
+    const withLegacyFocus = {
+      ...current,
+      focusSessions: [{ id: "focus-old" }],
+      activeFocusSession: { id: "active-old" },
+      settings: { ...current.settings, defaultFocusMode: "pomodoro", focusBreakBufferMin: 10 },
+    };
+
+    const saved = saveState(storage, withLegacyFocus);
+    const persisted = JSON.parse(storage.getItem(STATE_KEY) ?? "{}") as Record<string, unknown>;
+    const exported = JSON.parse(exportState(withLegacyFocus)) as Record<string, unknown>;
+
+    for (const value of [saved, persisted, exported]) {
+      expect(value).not.toHaveProperty("focusSessions");
+      expect(value).not.toHaveProperty("activeFocusSession");
+      expect(value.settings).not.toHaveProperty("defaultFocusMode");
+      expect(value.settings).not.toHaveProperty("focusBreakBufferMin");
+    }
   });
 
   it("deleting a saved place does not change task location snapshots", () => {

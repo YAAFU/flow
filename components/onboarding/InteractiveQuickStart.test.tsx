@@ -12,7 +12,6 @@ const callbacks = {
   onSkip: vi.fn(),
   onSuccessShown: vi.fn(),
   onViewTimeline: vi.fn(),
-  onStartFocus: vi.fn(),
 };
 
 function target(stage: "add-task" | "schedule-task") {
@@ -141,17 +140,18 @@ describe("InteractiveQuickStart", () => {
     expect(container?.textContent).toContain("เพิ่มงานแรกของคุณ");
   });
 
-  it("shows success only when requested and delegates Timeline and Focus", async () => {
+  it("shows success only when requested and delegates Timeline and add-task actions", async () => {
     await render({
       state: { status: "started", stage: "completed", taskId: "task-1" },
       showSuccess: true,
     });
     expect(container?.textContent).toContain("แผนวันแรกพร้อมแล้ว");
     expect(callbacks.onSuccessShown).toHaveBeenCalledOnce();
-    await act(async () => button("ดู Timeline")?.click());
-    await act(async () => button("เริ่มโฟกัส")?.click());
+    await act(async () => button("ดูแผนของฉัน")?.click());
+    await act(async () => button("เพิ่มงานอีก")?.click());
     expect(callbacks.onViewTimeline).toHaveBeenCalledOnce();
-    expect(callbacks.onStartFocus).toHaveBeenCalledOnce();
+    expect(callbacks.onAddTask).toHaveBeenCalledOnce();
+    expect(container?.textContent).not.toContain("โฟกัส");
   });
 
   it("skips with Escape and never invokes a primary action", async () => {

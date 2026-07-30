@@ -35,6 +35,7 @@ import {
 } from "@/lib/guide-planner";
 import {
   completeProductGuide,
+  hasResolvedOnboarding,
   loadOnboardingState,
   setProductGuideStep,
   skipProductGuide,
@@ -157,7 +158,7 @@ function ProductStepThree() {
     },
     {
       title: "เริ่มลงมือทำ",
-      description: "ดู Timeline และเข้าโหมด Focus เมื่อต้องการเริ่มงาน",
+      description: "ดูงานถัดไปและช่วงว่างบน Timeline แล้วเริ่มทำตามแผนได้ทันที",
     },
   ];
   return (
@@ -295,6 +296,11 @@ export function ProductGuide() {
       const shouldRestart = params.get("restart") === "1";
 
       const saved = loadOnboardingState(window.localStorage);
+      if (!requestedStart && !shouldRestart && hasResolvedOnboarding(saved)) {
+        exiting.current = true;
+        router.replace("/app");
+        return;
+      }
       if (shouldRestart) startProductGuide(window.localStorage, 1);
 
       if (requestedStart === "templates") {
@@ -331,7 +337,7 @@ export function ProductGuide() {
       setReady(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [hydrated]);
+  }, [hydrated, router]);
 
   useEffect(() => {
     if (!ready || exiting.current) return;

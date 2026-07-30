@@ -9,7 +9,6 @@ export const TOUR_TARGETS = {
   primaryAction: "[data-tour='primary-action']",
   aiPlanner: "[data-tour='ai-planner']",
   timeline: "[data-tour='timeline']",
-  focus: "[data-tour='focus']",
   calendarNav: "[data-tour='calendar-nav']",
   dashboardNav: "[data-tour='dashboard-nav']",
   searchNav: "[data-tour='search-nav']",
@@ -20,7 +19,6 @@ export type GuidedTourMode = "core" | "full";
 export type GuidedTourView =
   | "today"
   | "timeline"
-  | "focus"
   | "calendar"
   | "dashboard"
   | "search"
@@ -51,7 +49,7 @@ export const CORE_TOUR_STEPS = [
     target: TOUR_TARGETS.primaryAction,
     view: "today",
     title: "ทำสิ่งที่สำคัญก่อน",
-    description: "ปุ่มหลักจะเปลี่ยนตามวันของคุณ ตั้งแต่เพิ่มงาน จัดวัน ไปจนเริ่มโฟกัส",
+    description: "ปุ่มหลักจะเปลี่ยนตามวันของคุณ ตั้งแต่เพิ่มงาน จัดวัน ไปจนดูงานถัดไป",
     side: "top",
     align: "center",
   },
@@ -72,15 +70,6 @@ export const CORE_TOUR_STEPS = [
     description: "ดูงานตามเวลาและเห็นช่องว่างที่ยังใช้ได้ภายในวันเดียว",
     side: "top",
     align: "start",
-  },
-  {
-    id: "focus",
-    target: TOUR_TARGETS.focus,
-    view: "focus",
-    title: "ลงมือทำทีละงาน",
-    description: "โหมดโฟกัสช่วยให้เห็นเฉพาะงานตรงหน้าและสิ่งที่ต้องทำต่อ",
-    side: "top",
-    align: "center",
   },
 ] as const satisfies readonly GuidedTourStep[];
 

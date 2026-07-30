@@ -2,7 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDefaultState } from "@/lib/storage";
-import { loadOnboardingState } from "@/lib/onboarding";
+import { completeProductGuide, loadOnboardingState } from "@/lib/onboarding";
 
 const runtime = vi.hoisted(() => ({
   flowState: null as unknown,
@@ -87,6 +87,23 @@ describe("/guide route", () => {
 });
 
 describe("three-page Product Guide", () => {
+  it("redirects a resolved plain Guide while allowing an explicit restart", async () => {
+    completeProductGuide(window.localStorage);
+    await act(async () => {
+      root?.render(<ProductGuide />);
+      await new Promise((resolve) => window.setTimeout(resolve, 5));
+    });
+    await vi.waitFor(() => expect(runtime.routerReplace).toHaveBeenCalledWith("/app"));
+
+    act(() => root?.unmount());
+    root = createRoot(container!);
+    runtime.routerReplace.mockReset();
+    window.history.replaceState({}, "", "/guide?restart=1");
+    await renderGuide();
+    expect(container?.textContent).toContain("1 / 3");
+    expect(runtime.routerReplace).not.toHaveBeenCalledWith("/app");
+  });
+
   it("has exactly three normal pages and keeps the Before/After and comparison concepts", async () => {
     await renderGuide();
     expect(container?.textContent).toContain("1 / 3");
@@ -103,6 +120,8 @@ describe("three-page Product Guide", () => {
     expect(container?.textContent).toContain("เพิ่มสิ่งที่ต้องทำ");
     expect(container?.textContent).toContain("ให้ Flow จัดเวลา");
     expect(container?.textContent).toContain("เริ่มลงมือทำ");
+    expect(container?.textContent).toContain("ดูงานถัดไปและช่วงว่างบน Timeline");
+    expect(container?.textContent).not.toContain("Focus");
     expect(findButton("เริ่มวางแผนวันแรก")).toBeTruthy();
     expect(container?.textContent).not.toContain("4 / 4");
   });

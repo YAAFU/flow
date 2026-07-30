@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Clock3, Timer } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3 } from "lucide-react";
 import type { FlowState } from "@/lib/types";
 import { calculateStatistics } from "@/lib/statistics";
 
@@ -13,11 +13,10 @@ export function DashboardPanel({ state }: { state: FlowState }) {
   const from = new Date();
   from.setDate(to.getDate() - days + 1);
   const key = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  const stats = calculateStatistics(state.tasksByDay, state.focusSessions, key(from), key(to), to);
+  const stats = calculateStatistics(state.tasksByDay, key(from), key(to), to);
 
   const cards = [
     { label: "งานที่ทำสำเร็จ", value: stats.completed, suffix: `/ ${stats.total}`, icon: CheckCircle2 },
-    { label: "เวลาโฟกัสจริง", value: stats.focusMinutes, suffix: "นาที", icon: Timer },
     { label: "เวลาตามแผน", value: stats.plannedMinutes, suffix: "นาที", icon: Clock3 },
     { label: "งานเลยกำหนด", value: stats.overdue, suffix: "งาน", icon: AlertTriangle, warning: stats.overdue > 0 },
   ];
@@ -38,15 +37,15 @@ export function DashboardPanel({ state }: { state: FlowState }) {
       </article>
 
       <div className="flow-stagger mt-3 grid grid-cols-2 gap-3">
-        {cards.map(({ label, value, suffix, icon: Icon, warning }) => (
-          <article key={label} className={`flow-card min-h-32 rounded-2xl p-4 ${warning ? "border-amber-600" : ""}`}>
+        {cards.map(({ label, value, suffix, icon: Icon, warning }, index) => (
+          <article key={label} className={`flow-card min-h-32 rounded-2xl p-4 ${index === cards.length - 1 ? "col-span-2" : ""} ${warning ? "border-amber-600" : ""}`}>
             <div className="flex items-center justify-between"><p className="text-xs text-[var(--flow-muted)]">{label}</p><Icon size={16} className={warning ? "text-[var(--flow-warning)]" : "text-[var(--flow-muted)]"} aria-hidden /></div>
             <p className={`mt-4 text-2xl font-bold ${warning ? "text-[var(--flow-warning)]" : ""}`}><span className="font-grotesk">{value}</span> <span className="text-xs font-medium">{suffix}</span></p>
           </article>
         ))}
       </div>
 
-      <p className="mt-4 text-xs leading-5 text-[var(--flow-muted)]">ตัวเลขทั้งหมดคำนวณจากงานและ Focus Session ที่บันทึกจริง ไม่มีคะแนนหรือแนวโน้มที่สร้างขึ้นเอง</p>
+      <p className="mt-4 text-xs leading-5 text-[var(--flow-muted)]">ตัวเลขทั้งหมดคำนวณจากงานที่บันทึกจริง ไม่มีคะแนนหรือแนวโน้มที่สร้างขึ้นเอง</p>
     </section>
   );
 }

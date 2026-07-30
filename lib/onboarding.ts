@@ -14,7 +14,8 @@ import {
 export const ONBOARDING_KEY = "flow_onboarding_v2";
 export const LEGACY_ONBOARDING_KEY = "flow_onboarding_v1";
 export const LEGACY_TOUR_KEY = "flow_tour_seen";
-export const ONBOARDING_SCHEMA_VERSION = 3 as const;
+export const PRODUCT_GUIDE_VERSION = 2 as const;
+export const ONBOARDING_SCHEMA_VERSION = 4 as const;
 export const ONBOARDING_STEP_COUNT = 3 as const;
 
 export const GuidanceStatusSchema = z.enum([
@@ -51,6 +52,7 @@ export const OnboardingDraftSchema = z.object({
 });
 
 export const ProductGuideStateSchema = z.object({
+  version: z.literal(PRODUCT_GUIDE_VERSION),
   status: GuidanceStatusSchema,
   currentStep: z.number().int().min(1).max(ONBOARDING_STEP_COUNT),
   startedAt: z.string().datetime().optional(),
@@ -113,7 +115,11 @@ function safeNow(now: Date): string {
 export function createDefaultOnboardingState(now = new Date()): OnboardingState {
   return {
     schemaVersion: ONBOARDING_SCHEMA_VERSION,
-    productGuide: { status: "not_started", currentStep: 1 },
+    productGuide: {
+      version: PRODUCT_GUIDE_VERSION,
+      status: "not_started",
+      currentStep: 1,
+    },
     quickStart: { status: "not_started", stage: "add_task" },
     tour: { coreStatus: "not_started", fullStatus: "not_started" },
     sampleDay: { selectedTemplate: null, draft: null },
@@ -188,7 +194,7 @@ function normalizeDraft(value: unknown): OnboardingDraft | null {
   return parsed.success ? parsed.data : null;
 }
 
-function migrateV3(value: JsonRecord, now: Date): OnboardingState | null {
+function migrateV4(value: JsonRecord, now: Date): OnboardingState | null {
   if (value.schemaVersion !== ONBOARDING_SCHEMA_VERSION) return null;
   const parsed = OnboardingStateSchema.safeParse(value);
   if (parsed.success) return parsed.data;
@@ -198,18 +204,77 @@ function migrateV3(value: JsonRecord, now: Date): OnboardingState | null {
   const quickStart = isRecord(value.quickStart) ? value.quickStart : {};
   const tour = isRecord(value.tour) ? value.tour : {};
   const sampleDay = isRecord(value.sampleDay) ? value.sampleDay : {};
-  const productStatus = normalizeStatus(productGuide.status, productGuide);
+  const productVersion = productGuide.version;
+  const productStatus = productVersion === PRODUCT_GUIDE_VERSION
+    ? normalizeStatus(productGuide.status, productGuide)
+    : "not_started";
   const quickStatus = normalizeStatus(quickStart.status, quickStart);
   const quickStage = QuickStartStageSchema.safeParse(quickStart.stage);
 
   return OnboardingStateSchema.parse({
     ...defaults,
     productGuide: {
+      version: PRODUCT_GUIDE_VERSION,
       status: productStatus,
       currentStep: productStatus === "completed"
         ? ONBOARDING_STEP_COUNT
-        : normalizeStep(productGuide.currentStep),
-      startedAt: safeIso(productGuide.startedAt),
+        : productStatus === "not_started" ? 1 : normalizeStep(productGuide.currentStep),
+      startedAt: productStatus === "not_started" ? undefined : safeIso(productGuide.startedAt),
+      completedAt: productStatus === "completed" ? safeIso(productGuide.completedAt) : undefined,
+    },
+    quickStart: {
+      status: quickStatus,
+      stage: quickStatus === "completed"
+        ? "completed"
+        : quickStage.success ? quickStage.data : "add_task",
+      taskId: typeof quickStart.taskId === "string" && quickStart.taskId.trim()
+        ? quickStart.taskId
+        : undefined,
+      startedAt: safeIso(quickStart.startedAt),
+      completedAt: quickStatus === "completed" ? safeIso(quickStart.completedAt) : undefined,
+    },
+    tour: {
+      coreStatus: normalizeTourStatus(tour.coreStatus),
+      fullStatus: normalizeTourStatus(tour.fullStatus),
+    },
+    sampleDay: {
+      selectedTemplate: normalizeTemplate(sampleDay.selectedTemplate),
+      draft: normalizeDraft(sampleDay.draft),
+    },
+    updatedAt: safeIso(value.updatedAt) ?? safeNow(now),
+  });
+}
+
+function migrateStructuredLegacy(value: JsonRecord, now: Date): OnboardingState | null {
+  if (
+    !isRecord(value.productGuide)
+    && !isRecord(value.quickStart)
+    && !isRecord(value.tour)
+    && !isRecord(value.sampleDay)
+  ) {
+    return null;
+  }
+
+  const defaults = createDefaultOnboardingState(now);
+  const productGuide = isRecord(value.productGuide) ? value.productGuide : {};
+  const quickStart = isRecord(value.quickStart) ? value.quickStart : {};
+  const tour = isRecord(value.tour) ? value.tour : {};
+  const sampleDay = isRecord(value.sampleDay) ? value.sampleDay : {};
+  const productStatus = productGuide.version === PRODUCT_GUIDE_VERSION
+    ? normalizeStatus(productGuide.status, productGuide)
+    : "not_started";
+  const quickStatus = normalizeStatus(quickStart.status, quickStart);
+  const quickStage = QuickStartStageSchema.safeParse(quickStart.stage);
+
+  return OnboardingStateSchema.parse({
+    ...defaults,
+    productGuide: {
+      version: PRODUCT_GUIDE_VERSION,
+      status: productStatus,
+      currentStep: productStatus === "completed"
+        ? ONBOARDING_STEP_COUNT
+        : productStatus === "not_started" ? 1 : normalizeStep(productGuide.currentStep),
+      startedAt: productStatus === "not_started" ? undefined : safeIso(productGuide.startedAt),
       completedAt: productStatus === "completed" ? safeIso(productGuide.completedAt) : undefined,
     },
     quickStart: {
@@ -237,41 +302,40 @@ function migrateV3(value: JsonRecord, now: Date): OnboardingState | null {
 
 /**
  * Migrates guidance only. It never reads, writes, or copies Flow task state.
- * A resolved v2 guide belongs to an existing user, so Quick Start is skipped
- * instead of surprising them with a new automatic overlay.
+ * Unversioned Product Guide progress is stale; independent Quick Start, Tour,
+ * and Sample Day progress is preserved when those fields are available.
  */
 export function migrateOnboardingState(value: unknown, now = new Date()): OnboardingState {
   const iso = safeNow(now);
   if (isRecord(value)) {
-    const current = migrateV3(value, now);
+    const current = migrateV4(value, now);
     if (current) return current;
+    const structured = migrateStructuredLegacy(value, now);
+    if (structured) return structured;
   }
 
   const source = isRecord(value) ? value : {};
-  const scalar = isRecord(value) ? value.status : value;
-  const status = normalizeStatus(scalar, source);
-  const resolved = status === "completed" || status === "skipped";
+  // Scalar and pre-versioned Product Guide values belong to an older
+  // experience. They may inform independent Tour migration, but can never
+  // resolve the current versioned Product Guide.
+  const status: OnboardingStatus = "not_started";
   const selectedTemplate = normalizeTemplate(
     source.selectedTemplate ?? source.template ?? source.templateType,
   );
   const draft = normalizeDraft(source.draft ?? source.draftSnapshot);
-  const currentStep = status === "completed"
-    ? ONBOARDING_STEP_COUNT
-    : normalizeStep(source.currentStep ?? source.step);
+  const currentStep = 1;
 
   return OnboardingStateSchema.parse({
     schemaVersion: ONBOARDING_SCHEMA_VERSION,
     productGuide: {
+      version: PRODUCT_GUIDE_VERSION,
       status,
       currentStep,
-      startedAt: safeIso(source.startedAt)
-        ?? (status === "started" || status === "completed" ? iso : undefined),
-      completedAt: status === "completed"
-        ? safeIso(source.completedAt) ?? iso
-        : undefined,
+      startedAt: undefined,
+      completedAt: undefined,
     },
     quickStart: {
-      status: resolved ? "skipped" : "not_started",
+      status: "not_started",
       stage: "add_task",
     },
     tour: {
@@ -315,6 +379,29 @@ function safeRemove(storage: StorageLike, key: string): void {
   }
 }
 
+const ONBOARDING_STORAGE_PROBE_KEY = "flow_onboarding_storage_probe";
+
+/**
+ * The Planner gate must fail open when browser storage cannot persist state.
+ * Otherwise completing or skipping the Guide would immediately redirect back
+ * to it and trap the user in a loop.
+ */
+export function canPersistOnboardingState(storage: StorageLike): boolean {
+  let previous: string | null = null;
+  try {
+    previous = storage.getItem(ONBOARDING_STORAGE_PROBE_KEY);
+    storage.setItem(ONBOARDING_STORAGE_PROBE_KEY, "1");
+    const persisted = storage.getItem(ONBOARDING_STORAGE_PROBE_KEY) === "1";
+    if (previous == null) storage.removeItem(ONBOARDING_STORAGE_PROBE_KEY);
+    else storage.setItem(ONBOARDING_STORAGE_PROBE_KEY, previous);
+    return persisted;
+  } catch {
+    if (previous == null) safeRemove(storage, ONBOARDING_STORAGE_PROBE_KEY);
+    else safeSet(storage, ONBOARDING_STORAGE_PROBE_KEY, previous);
+    return false;
+  }
+}
+
 function persistNormalized(storage: StorageLike, state: OnboardingState): OnboardingState {
   safeSet(storage, ONBOARDING_KEY, JSON.stringify(state));
   return state;
@@ -339,7 +426,7 @@ export function loadOnboardingState(storage: StorageLike, now = new Date()): Onb
 
   const legacyTour = safeGet(storage, LEGACY_TOUR_KEY);
   if (legacyTour && legacyTour !== "0" && legacyTour !== "false") {
-    const migrated = migrateOnboardingState("completed", now);
+    const migrated = createDefaultOnboardingState(now);
     migrated.tour.coreStatus = "completed";
     return persistNormalized(storage, migrated);
   }
@@ -383,6 +470,7 @@ export function startProductGuide(
   const existing = loadOnboardingState(storage, now);
   return updateOnboardingState(storage, {
     productGuide: {
+      version: PRODUCT_GUIDE_VERSION,
       status: "started",
       currentStep: normalizeStep(currentStep),
       startedAt: existing.productGuide.startedAt ?? safeNow(now),
@@ -509,21 +597,10 @@ export function updateSampleDay(
 
 export function markExistingUserGuidance(
   storage: StorageLike,
-  hasTasks: boolean,
+  _hasTasks: boolean,
   now = new Date(),
 ): OnboardingState {
-  const existing = loadOnboardingState(storage, now);
-  if (
-    !hasTasks
-    || existing.productGuide.status !== "not_started"
-    || existing.quickStart.status !== "not_started"
-  ) {
-    return existing;
-  }
-  return updateOnboardingState(storage, {
-    productGuide: { ...existing.productGuide, status: "skipped" },
-    quickStart: { ...existing.quickStart, status: "skipped" },
-  }, now);
+  return loadOnboardingState(storage, now);
 }
 
 export function resetOnboardingState(storage: StorageLike): OnboardingState {
@@ -534,7 +611,8 @@ export function resetOnboardingState(storage: StorageLike): OnboardingState {
 }
 
 export function hasResolvedOnboarding(state: OnboardingState): boolean {
-  return state.productGuide.status === "completed" || state.productGuide.status === "skipped";
+  return state.productGuide.version === PRODUCT_GUIDE_VERSION
+    && (state.productGuide.status === "completed" || state.productGuide.status === "skipped");
 }
 
 export function onboardingEntryPath(state: OnboardingState): "/guide" | "/app" {

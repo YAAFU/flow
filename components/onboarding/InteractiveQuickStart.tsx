@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { CheckCircle2, Focus, ListTodo, Sparkles, X } from "lucide-react";
+import { CheckCircle2, ListTodo, Plus, Sparkles, X } from "lucide-react";
 import type { QuickStartState } from "@/lib/onboarding";
 
 type TargetBox = {
@@ -21,7 +21,6 @@ export type InteractiveQuickStartProps = {
   onSkip: () => void;
   onSuccessShown: () => void;
   onViewTimeline: () => void;
-  onStartFocus: () => void;
 };
 
 const CONTENT = {
@@ -54,7 +53,6 @@ export function InteractiveQuickStart({
   onSkip,
   onSuccessShown,
   onViewTimeline,
-  onStartFocus,
 }: InteractiveQuickStartProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -155,9 +153,9 @@ export function InteractiveQuickStart({
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--flow-lime)] text-[#111111]"><CheckCircle2 aria-hidden size={24} /></div>
           <h2 id={titleId} className="mt-4 text-2xl font-bold">แผนวันแรกพร้อมแล้ว</h2>
           <p id={descriptionId} className="mt-2 text-sm leading-6 text-[var(--flow-muted)]">ตอนนี้คุณเห็นงาน เวลา และช่วงว่างในที่เดียว คุณยังแก้เวลาและรายละเอียดได้ทุกเมื่อ</p>
-          <div className="mt-5 grid gap-2 sm:grid-cols-2">
-            <button type="button" onClick={onViewTimeline} className="flow-press flow-inverse flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 font-semibold sm:col-span-2"><ListTodo aria-hidden size={17} />ดู Timeline</button>
-            <button type="button" onClick={onStartFocus} className="flow-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[var(--flow-line)] px-4 font-semibold sm:col-span-2"><Focus aria-hidden size={17} />เริ่มโฟกัส</button>
+          <div className="mt-5 grid gap-2">
+            <button type="button" onClick={onViewTimeline} className="flow-press flow-inverse flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 font-semibold"><ListTodo aria-hidden size={17} />ดูแผนของฉัน</button>
+            <button type="button" onClick={onAddTask} className="flow-press flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[var(--flow-line)] px-4 font-semibold"><Plus aria-hidden size={17} />เพิ่มงานอีก</button>
           </div>
         </section>
       </div>
